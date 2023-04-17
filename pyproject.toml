@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "spark-jobs-automation"
+version = "0.1.0"
+description = ""
+authors = ["Leonidee"]
+readme = "README.md"
+packages = [{include = "spark_jobs_automation"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.95.1"
+uvicorn = {extras = ["standard"], version = "^0.21.1"}
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
