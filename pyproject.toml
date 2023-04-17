@@ -10,6 +10,8 @@ packages = [{include = "spark-jobs-automation"}]
 python = "^3.11"
 fastapi = "^0.95.1"
 uvicorn = {extras = ["standard"], version = "^0.21.1"}
+requests = "^2.28.2"
+python-dotenv = "^1.0.0"
 
 
 [build-system]
