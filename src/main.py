@@ -152,6 +152,10 @@ class Spark:
 
 if __name__ == "__main__":
     import os
+    from dotenv import find_dotenv, load_dotenv
+
+    find_dotenv()
+    load_dotenv()
 
     YC_DATAPROC_CLUSTER_ID = os.getenv("YC_DATAPROC_CLUSTER_ID")
     YC_DATAPROC_BASE_URL = os.getenv("YC_DATAPROC_BASE_URL")
@@ -159,17 +163,18 @@ if __name__ == "__main__":
 
     FAST_API_BASE_URL = os.getenv("FAST_API_BASE_URL")
 
-    # dataproc = DataProcCluster(token=TOKEN, cluster_id=CLUSTER_ID, base_url=BASE_URL)
-    # dataproc.start()
-    # dataproc.is_running()
-
     # yc = YandexCloudAPI(oauth_token=YC_OAUTH_TOKEN)
     # IAM_TOKEN = yc.get_iam_token()
 
+    # dataproc = DataProcCluster(token=IAM_TOKEN, cluster_id=CLUSTER_ID, base_url=BASE_URL)
+    # dataproc.start()
+    # dataproc.is_running()
+
+    
     spark = Spark(base_url=FAST_API_BASE_URL, session_timeout=60 * 60)
     r = spark.do_tags_job(
-        date="2022-01-22",
-        depth="10",
+        date="2022-05-05",
+        depth="2",
         threshold="100",
         tags_verified_path="s3a://data-ice-lake-04/messager-data/snapshots/tags_verified/actual",
         src_path="s3a://data-ice-lake-04/messager-data/analytics/cleaned-events",
