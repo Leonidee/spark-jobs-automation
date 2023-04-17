@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Leonidee"]
 readme = "README.md"
-packages = [{include = "spark_jobs_automation"}]
+packages = [{include = "spark-jobs-automation"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
