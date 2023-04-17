@@ -1,4 +1,4 @@
 #!/usr/bin/bash
 
-source /home/ubuntu/code/job/venv/bin/activate
-exec python /home/ubuntu/code/job/api/api.py
+source /home/ubuntu/code/spark-jobs-automation/.venv/bin/activate
+exec python /home/ubuntu/code/spark-jobs-automation/api/api.py
