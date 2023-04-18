@@ -118,8 +118,6 @@ class Spark:
         src_path: str,
         tgt_path: str,
     ) -> bool:
-        is_job_done = False
-
         args = dict(
             date=date,
             depth=str(depth),
@@ -135,7 +133,6 @@ class Spark:
                 timeout=self.session_timeout,
                 data=args,
             )
-            response.raise_for_status()
 
         except HTTPError as e:
             raise e
@@ -143,11 +140,8 @@ class Spark:
         if response.status_code == 200:
             if response.json()["returncode"] == 0:
                 print("Vse zaebca!")
-                is_job_done = True
             else:
                 print("wrong")
-
-        return is_job_done
 
 
 if __name__ == "__main__":
@@ -170,7 +164,6 @@ if __name__ == "__main__":
     # dataproc.start()
     # dataproc.is_running()
 
-    
     spark = Spark(base_url=FAST_API_BASE_URL, session_timeout=60 * 60)
     r = spark.do_tags_job(
         date="2022-05-05",
