@@ -59,12 +59,12 @@ def start_dataproc_cluster():
 )
 def submit_tags_job_for_7d():
     spark.do_tags_job(
-        date=REPORT_DATE,
+        date=SPARK_REPORT_DATE,
         depth="7",
         threshold="100",
-        tags_verified_path="s3a://data-ice-lake-04/messager-data/snapshots/tags_verified/actual",
-        src_path="s3a://data-ice-lake-04/messager-data/analytics/cleaned-events",
-        tgt_path="s3a://data-ice-lake-04/messager-data/analytics/tag-candidates",
+        tags_verified_path=TAGS_VERIFIED_PATH,
+        src_path=SRC_PATH,
+        tgt_path=TGT_PATH,
     )
 
 
@@ -77,12 +77,12 @@ def submit_tags_job_for_7d():
 )
 def submit_tags_job_for_60d():
     spark.do_tags_job(
-        date=REPORT_DATE,
+        date=SPARK_REPORT_DATE,
         depth="60",
         threshold="100",
-        tags_verified_path="s3a://data-ice-lake-04/messager-data/snapshots/tags_verified/actual",
-        src_path="s3a://data-ice-lake-04/messager-data/analytics/cleaned-events",
-        tgt_path="s3a://data-ice-lake-04/messager-data/analytics/tag-candidates",
+        tags_verified_path=TAGS_VERIFIED_PATH,
+        src_path=SRC_PATH,
+        tgt_path=TGT_PATH,
     )
 
 
