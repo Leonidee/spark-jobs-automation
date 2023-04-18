@@ -2,6 +2,7 @@ from fastapi import FastAPI
 import uvicorn
 import subprocess
 import sys
+from pathlib import Path
 
 # package
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -14,7 +15,7 @@ app = FastAPI()
 def submit_tags_job(holder: SparkArgsHolder):
     CMD = [
         "spark-submit",
-        "/home/ubuntu/code/jobs/tags_job.py",
+        "/home/ubuntu/code/spark-jobs-automation/jobs/tags_job.py",
         holder.date,
         holder.depth,
         holder.threshold,
