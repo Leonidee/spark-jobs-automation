@@ -196,38 +196,3 @@ class Spark:
             else:
                 logger.exception("Unable to submit spark job! Something went wrong.")
                 raise SparkSubmitError
-
-
-if __name__ == "__main__":
-    import os
-    from dotenv import find_dotenv, load_dotenv
-
-    find_dotenv()
-    load_dotenv()
-
-    # YC_DATAPROC_CLUSTER_ID = os.getenv("YC_DATAPROC_CLUSTER_ID")
-    # YC_DATAPROC_BASE_URL = os.getenv("YC_DATAPROC_BASE_URL")
-    # YC_OAUTH_TOKEN = os.getenv("YC_OAUTH_TOKEN")
-
-    FAST_API_BASE_URL = os.getenv("FAST_API_BASE_URL")
-
-    # yc = YandexCloudAPI(oauth_token=YC_OAUTH_TOKEN)
-    # IAM_TOKEN = yc.get_iam_token()
-
-    # dataproc = DataProcCluster(
-    #     token=IAM_TOKEN,
-    #     cluster_id=YC_DATAPROC_CLUSTER_ID,
-    #     base_url=YC_DATAPROC_BASE_URL,
-    # )
-    # dataproc.start()
-    # dataproc.is_running()
-
-    spark = Spark(base_url=FAST_API_BASE_URL, session_timeout=60 * 60)
-    spark.do_tags_job(
-        date="2021-10-01",
-        depth="5",
-        threshold="50",
-        tags_verified_path="s3a://data-ice-lake-04/messager-data/snapshots/tags_verified/actual",
-        src_path="s3a://data-ice-lake-04/messager-data/analytics/cleaned-events",
-        tgt_path="s3a://data-ice-lake-04/messager-data/analytics/tag-candidates",
-    )
