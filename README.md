@@ -2,7 +2,7 @@
 
 # Pipeline
 
-![pipeline-2](https://github.com/Leonidee/spark-jobs-automation/blob/master/images/pipeline.png?raw=true)
+![pipeline](https://github.com/Leonidee/spark-jobs-automation/blob/master/images/pipeline-2.png?raw=true)
 
 
 # Supervisor
