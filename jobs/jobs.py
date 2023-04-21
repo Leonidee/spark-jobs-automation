@@ -43,16 +43,16 @@ class SparkKiller:
                 + str(date - timedelta(days=i))
                 for i in range(depth)
             ]
+            self.logger.info("Done.")
 
         else:
-            self.logger.error(
+            raise AttributeError(
                 "`event_type` must be only message, reaction or subscription."
             )
-            raise AttributeError
 
         return paths
 
-    def get_tags_dataset(
+    def do_tags_job(
         self,
         date: str,
         depth: int,
@@ -64,9 +64,15 @@ class SparkKiller:
         self.logger.info(
             f"Getting `tags` dataset from {date} date with {depth} days depth and {threshold} unique users threshold."
         )
-        paths = self._get_partitions_paths(
-            event_type="message", date=date, depth=depth, src_path=src_path
-        )
+        try:
+            self.logger.info("Preparing s3 paths.")
+            paths = self._get_partitions_paths(
+                event_type="message", date=date, depth=depth, src_path=src_path
+            )
+            self.logger.info("Done.")
+        except AttributeError as e:
+            self.logger.exception(e)
+
         try:
             self.logger.info("Reading parquet on s3.")
             messages = self.spark.read.parquet(*paths, compression="gzip")
@@ -131,6 +137,9 @@ class SparkKiller:
         except Exception as e:
             self.logger.exception("Unable to save dataset!")
             raise e
+
+        self.logger.info("Stopping Spark Session.")
+        self.spark.stop()
 
 
 class DataMover:
