@@ -11,11 +11,10 @@ from airflow.operators.empty import EmptyOperator
 from airflow.models.baseoperator import chain
 
 # package
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+sys.path.append(Path(__file__).parent.parent)
 from src.main import YandexCloudAPI, DataProcCluster, Spark
 
-find_dotenv(raise_error_if_not_found=True)
-load_dotenv()
+load_dotenv(dotenv_path=find_dotenv(raise_error_if_not_found=True), verbose=True)
 
 YC_DATAPROC_CLUSTER_ID = os.getenv("YC_DATAPROC_CLUSTER_ID")
 YC_DATAPROC_BASE_URL = os.getenv("YC_DATAPROC_BASE_URL")

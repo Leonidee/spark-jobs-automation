@@ -1,9 +1,26 @@
-import coloredlogs
-import logging
 import sys
 import re
 from pathlib import Path
 from pydantic import BaseModel
+from botocore.exceptions import ClientError
+import boto3
+import os
+from typing import List, Literal
+from datetime import datetime, timedelta
+from dotenv import load_dotenv, find_dotenv
+
+from log import SparkLogger
+
+logger = SparkLogger.get_logger(logger_name=str(Path(Path(__file__).name)))
+
+load_dotenv(dotenv_path=find_dotenv(raise_error_if_not_found=True), verbose=True)
+
+s3 = boto3.session.Session().client(
+    service_name="s3",
+    endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+)
 
 
 class SparkArgsHolder(BaseModel):
@@ -15,44 +32,39 @@ class SparkArgsHolder(BaseModel):
     tgt_path: str
 
 
-class SparkLogger:
-    def __init__(self):
-        pass
+def get_src_paths(
+    event_type: Literal["message", "reaction", "subscription"],
+    date: str,
+    depth: int,
+    src_path: str,
+) -> List[str]:
+    logger.info("Collecting paths.")
+    date = datetime.strptime(date, "%Y-%m-%d").date()
+    paths = [
+        f"{src_path}/event_type={event_type}/date=" + str(date - timedelta(days=i))
+        for i in range(depth)
+    ]
+    logger.info("Checking if each path exists on s3.")
+    existing_paths = []
+    for path in paths:
+        try:
+            response = s3.list_objects(
+                Bucket=path.split(sep="/")[2],
+                MaxKeys=5,
+                Prefix="/".join(path.split(sep="/")[3:]),
+            )
+            if "Contents" in response.keys():
+                existing_paths.append(path)
+            else:
+                print(f"No data for `{path}` key. Skipping...")
+                logger.info(f"No data for `{path}` on s3. This key will be skipped.")
+        except ClientError as e:
+            print(e)
+            logger.exeption(e)
+            sys.exit(1)
+    logger.info(f"Done with {len(existing_paths)} paths in total.")
 
-    def get_logger(logger_name: str, level: str = "INFO") -> logging.Logger:
-        logger = logging.getLogger(name=logger_name)
-
-        coloredlogs.install(logger=logger, level=level)
-        logger.setLevel(level=level)
-
-        if logger.hasHandlers():
-            logger.handlers.clear()
-
-        logger_handler = logging.StreamHandler(stream=sys.stdout)
-
-        colored_formatter = coloredlogs.ColoredFormatter(
-            fmt="[%(asctime)s UTC] {%(name)s:%(lineno)d} %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            level_styles=dict(
-                info=dict(color="green"),
-                error=dict(color="red", bold=False, bright=True),
-            ),
-            field_styles=dict(
-                asctime=dict(color="magenta"),
-                name=dict(color="cyan"),
-                levelname=dict(color="yellow", bold=False, bright=True),
-                lineno=dict(color="white"),
-            ),
-        )
-
-        logger_handler.setFormatter(fmt=colored_formatter)
-        logger.addHandler(logger_handler)
-        logger.propagate = False
-
-        return logger
-
-
-logger = SparkLogger.get_logger(logger_name=str(Path(Path(__file__).name)))
+    return existing_paths
 
 
 def assert_args(date: str, depth: int, threshold: int) -> None:

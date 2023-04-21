@@ -3,6 +3,8 @@ import findspark
 from datetime import datetime, timedelta
 from typing import List
 from pathlib import Path
+import sys
+import boto3
 
 from typing import Literal
 
@@ -12,11 +14,14 @@ os.environ["JAVA_HOME"] = "/usr/bin/java"
 os.environ["SPARK_HOME"] = "/usr/lib/spark"
 os.environ["PYTHONPATH"] = "/opt/conda/bin/python3"
 
+
 findspark.init()
 findspark.find()
 
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as f
+
+from py4j.protocol import Py4JJavaError
 
 from utils import SparkLogger
 
@@ -25,30 +30,32 @@ class SparkKiller:
     def __init__(self, app_name: str):
         self.logger = SparkLogger.get_logger(logger_name=str(Path(Path(__file__).name)))
         self.spark = SparkSession.builder.master("yarn").appName(app_name).getOrCreate()
+        self.s3 = boto3.session.Session().client(
+            service_name="s3",
+            endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        )
 
         self.spark.sparkContext.setLogLevel("WARN")
         self.logger.info("Initializing Spark Session.")
 
-    def _get_partitions_paths(
+    def get_src_paths(
         self,
         event_type: Literal["message", "reaction", "subscription"],
         date: str,
         depth: int,
         src_path: str,
     ) -> List:
-        if event_type in ("message", "reaction", "subscription"):
-            date = datetime.strptime(date, "%Y-%m-%d").date()
-            paths = [
-                f"{src_path}/event_type={event_type}/date="
-                + str(date - timedelta(days=i))
-                for i in range(depth)
-            ]
-            self.logger.info("Done.")
+        self.logger.info("Preparing s3 paths.")
 
-        else:
-            raise AttributeError(
-                "`event_type` must be only message, reaction or subscription."
-            )
+        date = datetime.strptime(date, "%Y-%m-%d").date()
+        paths = [
+            f"{src_path}/event_type={event_type}/date=" + str(date - timedelta(days=i))
+            for i in range(depth)
+        ]
+
+        self.logger.info("Done.")
 
         return paths
 
@@ -64,14 +71,11 @@ class SparkKiller:
         self.logger.info(
             f"Getting `tags` dataset from {date} date with {depth} days depth and {threshold} unique users threshold."
         )
-        try:
-            self.logger.info("Preparing s3 paths.")
-            paths = self._get_partitions_paths(
-                event_type="message", date=date, depth=depth, src_path=src_path
-            )
-            self.logger.info("Done.")
-        except AttributeError as e:
-            self.logger.exception(e)
+        self.logger.info("Preparing s3 paths.")
+        paths = self._get_src_paths(
+            event_type="message", date=date, depth=depth, src_path=src_path
+        )
+        self.logger.info("Done.")
 
         try:
             self.logger.info("Reading parquet on s3.")
@@ -79,9 +83,9 @@ class SparkKiller:
             self.logger.info(
                 f"Successfully get `tags` dataset with {messages.count()} rows."
             )
-        except Exception as e:
-            self.logger.exception("Unable access to s3 service!")
-            raise e
+        except Py4JJavaError as e:
+            self.logger.exception(e)
+            sys.exit(1)
 
         try:
             self.logger.info("Getting `tags_verified` dataset.")

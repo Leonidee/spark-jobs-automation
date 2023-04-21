@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 # package
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+sys.path.append(Path(__file__).parent.parent)
 from jobs.utils import SparkArgsHolder
 
 app = FastAPI()

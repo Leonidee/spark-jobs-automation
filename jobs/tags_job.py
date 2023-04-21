@@ -1,7 +1,30 @@
 import sys
+from typing import List, Literal
+from datetime import datetime, timedelta
 
-from utils import assert_args
+from utils import assert_args, get_src_paths
 from jobs import SparkKiller
+from log import SparkLogger
+
+
+def get_src_paths(
+    self,
+    event_type: Literal["message", "reaction", "subscription"],
+    date: str,
+    depth: int,
+    src_path: str,
+) -> List:
+    self.logger.info("Preparing s3 paths.")
+
+    date = datetime.strptime(date, "%Y-%m-%d").date()
+    paths = [
+        f"{src_path}/event_type={event_type}/date=" + str(date - timedelta(days=i))
+        for i in range(depth)
+    ]
+
+    self.logger.info("Done.")
+
+    return paths
 
 
 def main() -> None:
@@ -33,7 +56,7 @@ def main() -> None:
 
     try:  # ?
         spark = SparkKiller(app_name="APP")
-        spark.get_tags_dataset(
+        spark.do_tags_job(
             date=DATE,
             depth=int(DEPTH),
             threshold=int(THRESHOLD),
@@ -42,9 +65,10 @@ def main() -> None:
             tgt_path=str(TGT_PATH),
         )
 
-    except Exception:  # ?
-        print("Unable to submit spark application! Something went wrong.")
-        sys.exit(1)
+    except Exception as e:  # ?
+        raise e
+        # print("Unable to submit spark application! Something went wrong.")
+        # sys.exit(1)
 
 
 if __name__ == "__main__":
