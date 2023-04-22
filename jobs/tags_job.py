@@ -3,7 +3,7 @@ from pathlib import Path
 
 from utils import validate_job_submit_args, get_src_paths
 from jobs import SparkKiller
-from log import SparkLogger
+from jobs.logger import SparkLogger
 
 logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
 
