@@ -3,4 +3,4 @@ __pycache__
 logs
 plugins
 .env
-testing.py
+.pytest_cache

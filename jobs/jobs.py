@@ -1,12 +1,8 @@
 import os
 import findspark
-from datetime import datetime, timedelta
 from typing import List
 from pathlib import Path
-import sys
-import boto3
 
-from typing import Literal
 
 os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
 os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
@@ -21,87 +17,46 @@ findspark.find()
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as f
 
-from py4j.protocol import Py4JJavaError
 
-from utils import SparkLogger
+from jobs.utils import SparkLogger
 
 
 class SparkKiller:
     def __init__(self, app_name: str):
         self.logger = SparkLogger.get_logger(logger_name=str(Path(Path(__file__).name)))
         self.spark = SparkSession.builder.master("yarn").appName(app_name).getOrCreate()
-        self.s3 = boto3.session.Session().client(
-            service_name="s3",
-            endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-        )
 
         self.spark.sparkContext.setLogLevel("WARN")
         self.logger.info("Initializing Spark Session.")
-
-    def get_src_paths(
-        self,
-        event_type: Literal["message", "reaction", "subscription"],
-        date: str,
-        depth: int,
-        src_path: str,
-    ) -> List:
-        self.logger.info("Preparing s3 paths.")
-
-        date = datetime.strptime(date, "%Y-%m-%d").date()
-        paths = [
-            f"{src_path}/event_type={event_type}/date=" + str(date - timedelta(days=i))
-            for i in range(depth)
-        ]
-
-        self.logger.info("Done.")
-
-        return paths
 
     def do_tags_job(
         self,
         date: str,
         depth: int,
         threshold: int,
-        src_path: str,
+        src_paths: List[str] | str,
         tags_verified_path: str,
         tgt_path: str,
     ) -> None:
-        self.logger.info(
-            f"Getting `tags` dataset from {date} date with {depth} days depth and {threshold} unique users threshold."
-        )
-        self.logger.info("Preparing s3 paths.")
-        paths = self._get_src_paths(
-            event_type="message", date=date, depth=depth, src_path=src_path
-        )
-        self.logger.info("Done.")
-
+        self.logger.info(f"Starting tags job.")
         try:
-            self.logger.info("Reading parquet on s3.")
-            messages = self.spark.read.parquet(*paths, compression="gzip")
-            self.logger.info(
-                f"Successfully get `tags` dataset with {messages.count()} rows."
-            )
-        except Py4JJavaError as e:
-            self.logger.exception(e)
-            sys.exit(1)
+            self.logger.info("Getting `messages` dataset from s3.")
+            messages = self.spark.read.parquet(*src_paths, compression="gzip")
+            self.logger.info(f"Done. Rows in dataset {messages.count()}.")
 
-        try:
-            self.logger.info("Getting `tags_verified` dataset.")
+            self.logger.info("Getting `tags_verified` dataset from s3.")
             tags_verified = self.spark.read.parquet(tags_verified_path)
+            self.logger.info("Done.")
 
+            self.logger.info("Preparing `tags_verified`.")
             tags_verified = (
                 tags_verified.withColumn("tag", f.trim(tags_verified.tag))
                 .select("tag")
                 .distinct()
-            )
-        except Exception as e:
-            self.logger.exception("Unable access to s3 service!")
-            raise e
+            )  # ? which exceptions can it raise?
+            self.logger.info("Done.")
 
-        try:
-            self.logger.info("Grouping `tags` dataset.")
+            self.logger.info("Grouping `messages` dataset.")
             all_tags = (
                 messages.where(messages.message_channel_to.isNotNull())
                 .withColumn("tag", f.explode(messages.tags))
@@ -110,40 +65,39 @@ class SparkKiller:
                 .agg(f.count_distinct(messages.message_from).alias("suggested_count"))
                 .where(f.col("suggested_count") >= threshold)
             )
+            self.logger.info(f"Done. Rows in dataset: {all_tags.count()}.")
 
-        except Exception as e:
-            self.logger.exception(
-                "Unable to do some transformations with dataset! Something went wrong."
-            )
-            raise e
-
-        try:
             self.logger.info("Excluding verified tags.")
             tags = all_tags.join(other=tags_verified, on="tag", how="left_anti")
-            self.logger.info("Successfully excluded.")
-        except Exception as e:
-            self.logger.exception("Unable to exclude tags!")
-            raise e
+            self.logger.info(f"Done. Rows in dataset: {tags.count()}")
 
-        self.logger.info(
-            f"Successfully got `tags` dataset from {date} date with {depth} days depth with {tags.count()} row in total!"
-        )
-        try:
             self.logger.info(
                 f"Writing parquet -> {tgt_path}/date={date}/candidates-d{depth}"
             )
-            tags.write.parquet(
-                path=f"{tgt_path}/date={date}/candidates-d{depth}",
-                mode="overwrite",
-                compression="gzip",
-            )
-            self.logger.info("Dataset was successfully wrote.")
-        except Exception as e:
-            self.logger.exception("Unable to save dataset!")
-            raise e
+            try:
+                tags.write.parquet(
+                    path=f"{tgt_path}/date={date}/candidates-d{depth}",
+                    mode="errorifexists",
+                    compression="gzip",
+                )
+                self.logger.info("Done.")
+            except Exception:
+                self.logger.warning(
+                    "Notice that file already exists on s3 and will be overwritten!"
+                )
+                tags.write.parquet(
+                    path=f"{tgt_path}/date={date}/candidates-d{depth}",
+                    mode="overwrite",
+                    compression="gzip",
+                )
+                self.logger.info("Done.")
 
-        self.logger.info("Stopping Spark Session.")
-        self.spark.stop()
+        except Exception as e:
+            self.logger.exception(e)
+
+        finally:
+            self.logger.info("Stopping Spark Session.")
+            self.spark.stop()
 
 
 class DataMover:
