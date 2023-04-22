@@ -5,10 +5,12 @@ from pydantic import BaseModel
 from botocore.exceptions import ClientError
 import boto3
 import os
-from typing import List, Literal
+from typing import List, Literal, Union
 from datetime import datetime, timedelta
 
-from jobs.log import SparkLogger
+
+sys.path.append(str(Path(__file__).parent.parent))
+from jobs.logger import SparkLogger
 
 logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
 
@@ -22,10 +24,10 @@ class SparkArgsHolder(BaseModel):
     tgt_path: str
 
 
-def load_environment(dotenv_file_name: str = ".env") -> bool | None:
+def load_environment(dotenv_file_name: str = ".env") -> Union[bool, None]:
     from dotenv import load_dotenv, find_dotenv
 
-    logger.info("Finding and loading .env file.")
+    logger.info("Loading .env file.")
     is_loaded = False
     try:
         load_dotenv(

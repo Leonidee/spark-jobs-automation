@@ -1,7 +1,5 @@
 import sys
 import os
-from dotenv import find_dotenv, load_dotenv
-
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -11,10 +9,11 @@ from airflow.operators.empty import EmptyOperator
 from airflow.models.baseoperator import chain
 
 # package
-sys.path.append(Path(__file__).parent.parent)
+sys.path.append(str(Path(__file__).parent.parent))
 from src.main import YandexCloudAPI, DataProcCluster, Spark
+from jobs.utils import load_environment
 
-load_dotenv(dotenv_path=find_dotenv(raise_error_if_not_found=True), verbose=True)
+load_environment()
 
 YC_DATAPROC_CLUSTER_ID = os.getenv("YC_DATAPROC_CLUSTER_ID")
 YC_DATAPROC_BASE_URL = os.getenv("YC_DATAPROC_BASE_URL")

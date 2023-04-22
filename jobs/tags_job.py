@@ -1,9 +1,9 @@
 import sys
 from pathlib import Path
 
-from jobs.utils import validate_job_submit_args, get_src_paths
-from jobs.jobs import SparkKiller
-from jobs.log import SparkLogger
+from utils import validate_job_submit_args, get_src_paths
+from jobs import SparkKiller
+from log import SparkLogger
 
 logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
 
@@ -34,21 +34,15 @@ def main() -> None:
         event_type="message", date=DATE, depth=DEPTH, src_path=SRC_PATH
     )
 
-    try:  # ?
-        spark = SparkKiller(app_name="APP")
-        spark.do_tags_job(
-            date=DATE,
-            depth=DEPTH,
-            threshold=THRESHOLD,
-            tags_verified_path=VERIFIED_TAGS_PATH,
-            src_paths=paths,
-            tgt_path=TGT_PATH,
-        )
-
-    except Exception as e:  # ?
-        raise e
-        # print("Unable to submit spark application! Something went wrong.")
-        # sys.exit(1)
+    spark = SparkKiller(app_name="APP")
+    spark.do_tags_job(
+        date=DATE,
+        depth=DEPTH,
+        threshold=THRESHOLD,
+        tags_verified_path=VERIFIED_TAGS_PATH,
+        src_paths=paths,
+        tgt_path=TGT_PATH,
+    )
 
 
 if __name__ == "__main__":
