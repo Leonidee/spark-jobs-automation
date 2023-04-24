@@ -6,7 +6,7 @@ from pathlib import Path
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from jobs.utils import SparkArgsHolder
+from src.utils import SparkArgsHolder
 
 app = FastAPI()
 
@@ -20,7 +20,7 @@ def submit_tags_job(holder: SparkArgsHolder):
         holder.depth,
         holder.threshold,
         holder.tags_verified_path,
-        holder.src_path,
+        holder.src_paths,
         holder.tgt_path,
     ]
 

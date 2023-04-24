@@ -285,6 +285,7 @@ class SparkSubmitter:
             f"Spark job args:\n`date` - {args['date']}\n`depth` - {args['depth']}\n`threshold` - {args['threshold']}"
         )
         args = json.dumps(args)
+        print(args)
         is_done = False
         try:
             logger.info("Processing...")

@@ -20,14 +20,14 @@ class SparkArgsHolder(BaseModel):
     depth: str
     threshold: str
     tags_verified_path: str
-    src_path: str
+    src_paths: list[str]
     tgt_path: str
 
 
 def load_environment(dotenv_file_name: str = ".env") -> Union[bool, None]:
     from dotenv import load_dotenv, find_dotenv
 
-    logger.info("Loading .env file.")
+    logger.info("Loading .env file")
     is_loaded = False
     try:
         load_dotenv(
@@ -37,7 +37,7 @@ def load_environment(dotenv_file_name: str = ".env") -> Union[bool, None]:
             verbose=True,
         )
         is_loaded = True
-        logger.info("Done.")
+        logger.info("Done")
     except IOError:
         logger.error(".env file not found!")
         sys.exit(1)
@@ -46,7 +46,7 @@ def load_environment(dotenv_file_name: str = ".env") -> Union[bool, None]:
 
 
 def get_s3_instance():
-    logger.info("Getting s3 connection instace.")
+    logger.info("Getting s3 connection instace")
 
     load_environment()
 
@@ -66,7 +66,7 @@ def get_src_paths(
     depth: int,
     src_path: str,
 ) -> List[str]:
-    logger.info("Collecting paths.")
+    logger.info("Collecting src paths")
 
     date = datetime.strptime(date, "%Y-%m-%d").date()
     depth = int(depth)
@@ -76,7 +76,7 @@ def get_src_paths(
         for i in range(depth)
     ]
 
-    logger.info("Checking if each path exists on s3.")
+    logger.info("Checking if each path exists on s3")
 
     s3 = get_s3_instance()
 
@@ -91,7 +91,7 @@ def get_src_paths(
             if "Contents" in response.keys():
                 existing_paths.append(path)
             else:
-                logger.info(f"No data for `{path}` on s3. Skipping.")
+                logger.info(f"No data for `{path}` on s3. Skipping")
         except ClientError as e:
             logger.exception(e)
             sys.exit(1)
@@ -101,7 +101,7 @@ def get_src_paths(
         logger.error("There is no data for given arguments!")
         sys.exit(1)
 
-    logger.info(f"Done with {len(existing_paths)} paths in total.")
+    logger.info(f"Done with {len(existing_paths)} paths in total")
 
     return existing_paths
 

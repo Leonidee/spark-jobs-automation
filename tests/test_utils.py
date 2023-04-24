@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from jobs.utils import (
+from src.utils import (
     validate_job_submit_args,
     get_src_paths,
     get_s3_instance,

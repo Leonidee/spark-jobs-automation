@@ -19,7 +19,7 @@ class SparkLogger(logging.Logger):
         logger_handler = logging.StreamHandler(stream=sys.stdout)
 
         colored_formatter = coloredlogs.ColoredFormatter(
-            fmt="[%(asctime)s UTC] {%(name)s:%(lineno)d} %(levelname)s - %(message)s",
+            fmt="[%(asctime)s] {%(name)s:%(lineno)d} %(levelname)s: %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
             level_styles=dict(
                 info=dict(color="green"),
