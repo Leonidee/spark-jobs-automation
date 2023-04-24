@@ -10,8 +10,8 @@ from airflow.models.baseoperator import chain
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.main import YandexCloudAPI, DataProcCluster, Spark
-from jobs.utils import load_environment
+from src.main import YandexCloudAPI, DataProcCluster, SparkSubmitter
+from src.utils import load_environment
 
 load_environment()
 
@@ -33,7 +33,7 @@ token = yc.get_iam_token()
 cluster = DataProcCluster(
     token=token, cluster_id=YC_DATAPROC_CLUSTER_ID, base_url=YC_DATAPROC_BASE_URL
 )
-spark = Spark(base_url=FAST_API_BASE_URL, session_timeout=60 * 60)
+spark = SparkSubmitter(base_url=FAST_API_BASE_URL)
 
 
 @task(
@@ -98,7 +98,7 @@ def stop_dataproc_cluster():
 
 @dag(
     dag_id="tags-job",
-    schedule=None,
+    schedule="0 2 * * *",
     start_date=datetime(2023, 4, 3),
     catchup=False,
     is_paused_upon_creation=False,

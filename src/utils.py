@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 
 sys.path.append(str(Path(__file__).parent.parent))
-from jobs.logger import SparkLogger
+from src.logger import SparkLogger
 
 logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
 
@@ -107,7 +107,7 @@ def get_src_paths(
 
 
 def validate_job_submit_args(date: str, depth: int, threshold: int) -> None:
-    logger.info("Asserting given arguments: `date`, `depth` and `threshold`.")
+    logger.info("Validating given arguments: `date`, `depth` and `threshold`.")
 
     if not re.match(pattern="^\d*$", string=str(depth)):
         raise AssertionError(
@@ -130,4 +130,4 @@ def validate_job_submit_args(date: str, depth: int, threshold: int) -> None:
     if int(threshold) > 5_000:
         raise AssertionError("`threshold` must be lower that 5.000.")
 
-    logger.info("Assertion comleted.")
+    logger.info("Validation comleted.")

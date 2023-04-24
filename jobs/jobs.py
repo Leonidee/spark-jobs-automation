@@ -3,7 +3,7 @@ import findspark
 from typing import List
 from pathlib import Path
 
-from logger import SparkLogger
+from src.logger import SparkLogger
 
 os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
 os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
