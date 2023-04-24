@@ -1,45 +1,48 @@
-import requests
 from time import sleep
-from requests import HTTPError
 import json
 from logging import getLogger
 import sys
 from pathlib import Path
 
-# package
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-from src.exeptions import APIServiceError, SparkSubmitError
+from requests.exceptions import HTTPError, ConnectionError, InvalidSchema
+import requests
 
-logger = getLogger("aiflow.task")
+# package
+sys.path.append(str(Path(__file__).parent.parent))
+from src.exeptions import APIServiceError, SparkSubmitError, YandexCloudAPIError
+from jobs.logger import SparkLogger
+
+# logger = getLogger("aiflow.task")
+logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
 
 
 class YandexCloudAPI:
-    def __init__(self, oauth_token) -> None:
-        self.oauth_token = oauth_token
+    def __init__(self) -> None:
+        pass
 
-    def get_iam_token(self) -> str:
-        iam_token = ""
-        logger.info("Getting Yandex Cloud IAM token.")
+    def get_iam_token(self, oauth_token: str) -> str:
+        logger.info("Getting Yandex Cloud IAM token")
+        iam_token = None
         try:
             response = requests.post(
                 url="https://iam.api.cloud.yandex.net/iam/v1/tokens",
-                json={"yandexPassportOauthToken": self.oauth_token},
+                json={"yandexPassportOauthToken": oauth_token},
             )
+            response.raise_for_status()
+
             if response.status_code == 200:
-                logger.info("Response received.")
+                logger.info("Response received")
                 response = response.json()
 
                 if "iamToken" in response.keys():
                     iam_token = response["iamToken"]
-                    logger.info("IAM token collected.")
+                    logger.info("IAM token collected!")
                 else:
-                    logger.warn(
-                        "There is no IAM token in API response. Something went wrong."
-                    )
+                    raise YandexCloudAPIError("There is no IAM token in API response!")
 
-        except HTTPError as e:
-            logger.exception("Bad API request! Something went wrong.")
-            raise e
+        except (requests.HTTPError, YandexCloudAPIError) as e:
+            logger.exception(e)
+            sys.exit(1)
 
         return iam_token
 
@@ -50,30 +53,51 @@ class DataProcCluster:
         self.cluster_id = cluster_id
         self.base_url = base_url
 
-    def start(self) -> None:
-        logger.info("Starting Cluster.")
+    def start(self) -> bool:
+        logger.info("Starting Cluster")
+
         try:
-            logger.info("Sending request to API.")
+            logger.info("Sending request to API")
             response = requests.post(
                 url=f"{self.base_url}/{self.cluster_id}:start",
                 headers={"Authorization": f"Bearer {self.token}"},
+                timeout=60,
             )
-            logger.info("Request was send.")
-        except HTTPError as e:
-            logger.exception("Bad API request! Something went wrong.")
-            raise e
+            response.raise_for_status()
 
-    def stop(self) -> None:
-        logger.info("Stopping Cluster.")
+            if response.status_code == 200:
+                logger.info("Request was sent")
+                return True
+
+        except (HTTPError, InvalidSchema) as e:
+            logger.error(e)
+            sys.exit(1)
+
+        except ConnectionError as e:
+            logger.exception(e)
+            sys.exit(1)
+
+    def stop(self) -> bool:
+        logger.info("Stopping Cluster")
         try:
+            logger.info("Sending request to API")
             response = requests.post(
                 url=f"{self.base_url}/{self.cluster_id}:stop",
                 headers={"Authorization": f"Bearer {self.token}"},
             )
-            logger.info("Request was send.")
-        except HTTPError as e:
-            logger.exception("Bad API request! Something went wrong.")
-            raise e
+            response.raise_for_status()
+
+            if response.status_code == 200:
+                logger.info("Request was sent")
+                return True
+
+        except (HTTPError, InvalidSchema) as e:
+            logger.error(e)
+            sys.exit(1)
+
+        except ConnectionError as e:
+            logger.exception(e)
+            sys.exit(1)
 
     def is_running(self) -> None:
         is_active = False
@@ -87,9 +111,13 @@ class DataProcCluster:
                     url=f"{self.base_url}/{self.cluster_id}",
                     headers={"Authorization": f"Bearer {self.token}"},
                 )
-            except HTTPError as e:
-                logger.exception("Bad API request! Something went wrong.")
-                raise e
+            except (HTTPError, InvalidSchema) as e:
+                logger.error(e)
+                sys.exit(1)
+
+            except ConnectionError as e:
+                logger.exception(e)
+                sys.exit(1)
 
             if response.status_code == 200:
                 response = response.json()
@@ -101,11 +129,11 @@ class DataProcCluster:
                         logger.info("Cluster is ready!")
                         is_active = True
                         break
-            if i > 25:
-                logger.exception(
-                    f"No more attemts left to check Cluster status! Cluster isn't running."
+            if i == 3:
+                logger.error(
+                    "No more attemts left to check Cluster status! Cluster isn't running."
                 )
-                raise APIServiceError
+                sys.exit(1)
             else:
                 sleep(10)
                 i += 1
@@ -122,9 +150,13 @@ class DataProcCluster:
                     url=f"{self.base_url}/{self.cluster_id}",
                     headers={"Authorization": f"Bearer {self.token}"},
                 )
-            except HTTPError as e:
-                logger.exception("Bad API request! Something went wrong.")
-                raise e
+            except (HTTPError, InvalidSchema) as e:
+                logger.error(e)
+                sys.exit(1)
+
+            except ConnectionError as e:
+                logger.exception(e)
+                sys.exit(1)
 
             if response.status_code == 200:
                 response = response.json()
@@ -137,11 +169,11 @@ class DataProcCluster:
                         is_stopped = True
                         break
 
-            if i > 25:
-                logger.exception(
-                    f"No more attemts left to check Cluster status! Cluster wasn't stopped."
+            if i > 3:
+                logger.error(
+                    "No more attemts left to check Cluster status! Cluster isn't running."
                 )
-                raise APIServiceError
+                sys.exit(1)
             else:
                 sleep(10)
                 i += 1

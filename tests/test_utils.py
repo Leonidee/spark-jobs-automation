@@ -123,7 +123,3 @@ def test_get_src_paths_exit_if_wrong_key_2():
         )
     assert ex.type == SystemExit
     assert ex.value.code == 1
-
-
-if __name__ == "__main__":
-    pytest.main()
