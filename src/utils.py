@@ -17,14 +17,14 @@ logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
 
 class SparkArgsHolder(BaseModel):
     date: str
-    depth: int
-    threshold: int
+    depth: str
+    threshold: str
     tags_verified_path: str
     src_path: str
     tgt_path: str
 
 
-def load_environment(dotenv_file_name: str = ".env") -> Union[bool, None]:
+def load_environment(dotenv_file_name: str = ".env") -> bool:
     from dotenv import load_dotenv, find_dotenv
 
     logger.info("Loading .env file")
@@ -107,7 +107,7 @@ def get_src_paths(
 
 
 def validate_job_submit_args(date: str, depth: int, threshold: int) -> None:
-    logger.info("Validating given arguments: `date`, `depth` and `threshold`.")
+    logger.info("Validating given arguments: `date`, `depth` and `threshold`")
 
     if not re.match(pattern="^\d*$", string=str(depth)):
         raise AssertionError(
@@ -125,9 +125,9 @@ def validate_job_submit_args(date: str, depth: int, threshold: int) -> None:
         )
 
     if int(depth) > 150:
-        raise AssertionError("`depth` must be lower that 150.")
+        raise AssertionError("`depth` must be lower that 150")
 
     if int(threshold) > 5_000:
-        raise AssertionError("`threshold` must be lower that 5.000.")
+        raise AssertionError("`threshold` must be lower that 5_000")
 
-    logger.info("Validation comleted.")
+    logger.info("Validation passed!")
