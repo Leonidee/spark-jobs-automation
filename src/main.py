@@ -11,10 +11,11 @@ import requests
 sys.path.append(str(Path(__file__).parent.parent))
 from src.exeptions import YandexCloudAPIError
 from src.logger import SparkLogger
-from src.utils import validate_job_submit_args, get_src_paths
 
 # logger = getLogger("aiflow.task")
-logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
+logger = SparkLogger(level="DEBUG").get_logger(
+    logger_name=str(Path(Path(__file__).name))
+)
 
 
 class YandexCloudAPI:
@@ -261,22 +262,13 @@ class SparkSubmitter:
         Returns:
             bool: State of submited job. True if job submit successfully and False if failed
         """
-        try:
-            validate_job_submit_args(date=date, depth=depth, threshold=threshold)
-        except AssertionError as e:
-            logger.exception(e)
-            sys.exit(1)
-
-        paths = get_src_paths(
-            event_type="message", date=date, depth=depth, src_path=src_path
-        )
 
         args = dict(
             date=date,
-            depth=str(depth),
-            threshold=str(threshold),
+            depth=depth,
+            threshold=threshold,
             tags_verified_path=tags_verified_path,
-            src_path=paths,
+            src_path=src_path,
             tgt_path=tgt_path,
         )
         logger.info("Requesting API to submit `tags` job.")
@@ -285,7 +277,8 @@ class SparkSubmitter:
             f"Spark job args:\n`date` - {args['date']}\n`depth` - {args['depth']}\n`threshold` - {args['threshold']}"
         )
         args = json.dumps(args)
-        print(args)
+        logger.debug(args)
+
         is_done = False
         try:
             logger.info("Processing...")
@@ -302,6 +295,7 @@ class SparkSubmitter:
 
         if response.status_code == 200:
             logger.info("Response received")
+            logger.debug(response.json())
             if response.json()["returncode"] == 0:
                 logger.info(
                     f"Spark Job was executed successfully! Results -> `{tgt_path}`"
