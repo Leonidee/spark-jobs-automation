@@ -9,7 +9,6 @@ import requests
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.exeptions import YandexCloudAPIError
 from src.logger import SparkLogger
 
 # logger = getLogger("aiflow.task")
@@ -40,6 +39,7 @@ class YandexCloudAPI:
             response = requests.post(
                 url="https://iam.api.cloud.yandex.net/iam/v1/tokens",
                 json={"yandexPassportOauthToken": oauth_token},
+                timeout=60 * 2,
             )
             response.raise_for_status()
 
@@ -51,9 +51,10 @@ class YandexCloudAPI:
                     iam_token = response["iamToken"]
                     logger.info("IAM token collected!")
                 else:
-                    raise YandexCloudAPIError("There is no IAM token in API response!")
+                    logger.error("There is no IAM token in API response!")
+                    sys.exit(1)
 
-        except (HTTPError, YandexCloudAPIError) as e:
+        except (HTTPError, ConnectionError, InvalidSchema, Timeout) as e:
             logger.exception(e)
             sys.exit(1)
 

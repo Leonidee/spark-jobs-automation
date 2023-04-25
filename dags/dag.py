@@ -31,7 +31,10 @@ yc = YandexCloudAPI(oauth_token=YC_OAUTH_TOKEN)
 token = yc.get_iam_token()
 
 cluster = DataProcCluster(
-    token=token, cluster_id=YC_DATAPROC_CLUSTER_ID, base_url=YC_DATAPROC_BASE_URL
+    token=token,
+    cluster_id=YC_DATAPROC_CLUSTER_ID,
+    base_url=YC_DATAPROC_BASE_URL,
+    max_attempts_to_check_status=5,
 )
 spark = SparkSubmitter(base_url=FAST_API_BASE_URL)
 
@@ -58,8 +61,8 @@ def start_dataproc_cluster():
 def submit_tags_job_for_7d():
     spark.do_tags_job(
         date=SPARK_REPORT_DATE,
-        depth="7",
-        threshold="100",
+        depth=7,
+        threshold=100,
         tags_verified_path=TAGS_VERIFIED_PATH,
         src_path=SRC_PATH,
         tgt_path=TGT_PATH,
@@ -76,8 +79,8 @@ def submit_tags_job_for_7d():
 def submit_tags_job_for_60d():
     spark.do_tags_job(
         date=SPARK_REPORT_DATE,
-        depth="60",
-        threshold="100",
+        depth=60,
+        threshold=200,
         tags_verified_path=TAGS_VERIFIED_PATH,
         src_path=SRC_PATH,
         tgt_path=TGT_PATH,
