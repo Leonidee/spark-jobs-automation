@@ -2,19 +2,11 @@ from time import sleep
 import json
 from logging import getLogger
 import sys
-from pathlib import Path
 
 from requests.exceptions import HTTPError, ConnectionError, InvalidSchema, Timeout
 import requests
 
-# package
-sys.path.append(str(Path(__file__).parent.parent))
-from src.logger import SparkLogger
-
-# logger = getLogger("aiflow.task")
-logger = SparkLogger(level="DEBUG").get_logger(
-    logger_name=str(Path(Path(__file__).name))
-)
+logger = getLogger("aiflow.task")
 
 
 class YandexCloudAPI:

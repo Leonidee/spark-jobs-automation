@@ -27,56 +27,60 @@ TAGS_VERIFIED_PATH = (
 SRC_PATH = "s3a://data-ice-lake-04/messager-data/analytics/cleaned-events"
 TGT_PATH = "s3a://data-ice-lake-04/messager-data/analytics/tag-candidates"
 
-yc = YandexCloudAPI(oauth_token=YC_OAUTH_TOKEN)
-token = yc.get_iam_token()
+SUBMIT_TASK_DEFAULT_ARGS = {
+    "retries": 3,
+    "retry_delay": timedelta(seconds=45),
+    "depends_on_past": True,
+}
+
+yc = YandexCloudAPI()
+token = yc.get_iam_token(oauth_token=YC_OAUTH_TOKEN)
 
 cluster = DataProcCluster(
     token=token,
     cluster_id=YC_DATAPROC_CLUSTER_ID,
     base_url=YC_DATAPROC_BASE_URL,
-    max_attempts_to_check_status=5,
+    max_attempts_to_check_status=20,
 )
-spark = SparkSubmitter(base_url=FAST_API_BASE_URL)
-
-
-@task(
-    default_args={
-        "retries": 2,
-        "retry_delay": timedelta(minutes=2),
-        "depends_on_past": True,
-    }
-)
-def start_dataproc_cluster():
-    cluster.start()
-    cluster.is_running()
+spark = SparkSubmitter(api_base_url=FAST_API_BASE_URL)
 
 
 @task(
     default_args={
         "retries": 3,
-        "retry_delay": timedelta(seconds=30),
+        "retry_delay": timedelta(minutes=2),
         "depends_on_past": True,
     }
 )
-def submit_tags_job_for_7d():
+def start_dataproc_cluster() -> None:
+    cluster.start()
+
+
+@task(
+    default_args={
+        "retries": 1,
+        "retry_delay": timedelta(minutes=1),
+        "depends_on_past": True,
+    }
+)
+def wait_until_running() -> None:
+    cluster.is_running()
+
+
+@task(default_args=SUBMIT_TASK_DEFAULT_ARGS)
+def submit_tags_job_for_7d() -> None:
     spark.do_tags_job(
         date=SPARK_REPORT_DATE,
         depth=7,
-        threshold=100,
+        threshold=50,
         tags_verified_path=TAGS_VERIFIED_PATH,
         src_path=SRC_PATH,
         tgt_path=TGT_PATH,
     )
 
 
-@task(
-    default_args={
-        "retries": 3,
-        "retry_delay": timedelta(seconds=30),
-        "depends_on_past": True,
-    }
-)
-def submit_tags_job_for_60d():
+@task(default_args=SUBMIT_TASK_DEFAULT_ARGS)
+def submit_tags_job_for_60d() -> None:
     spark.do_tags_job(
         date=SPARK_REPORT_DATE,
         depth=60,
@@ -89,13 +93,23 @@ def submit_tags_job_for_60d():
 
 @task(
     default_args={
-        "retries": 2,
+        "retries": 3,
         "retry_delay": timedelta(minutes=2),
         "depends_on_past": True,
     }
 )
-def stop_dataproc_cluster():
+def stop_dataproc_cluster() -> None:
     cluster.stop()
+
+
+@task(
+    default_args={
+        "retries": 1,
+        "retry_delay": timedelta(minutes=1),
+        "depends_on_past": True,
+    }
+)
+def wait_until_stopped() -> None:
     cluster.is_stopped()
 
 
@@ -114,13 +128,15 @@ def stop_dataproc_cluster():
 def taskflow() -> None:
     start = start_dataproc_cluster()
     stop = stop_dataproc_cluster()
+    is_running = wait_until_running()
+    is_stopped = wait_until_stopped()
     job_7d = submit_tags_job_for_7d()
     job_60d = submit_tags_job_for_60d()
 
     begin = EmptyOperator(task_id="begining")
     end = EmptyOperator(task_id="ending")
 
-    chain(begin, start, job_7d, job_60d, stop, end)
+    chain(begin, start, is_running, job_7d, job_60d, stop, is_stopped, end)
 
 
 taskflow()
