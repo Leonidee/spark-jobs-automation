@@ -17,10 +17,10 @@ logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
 
 class SparkArgsHolder(BaseModel):
     date: str
-    depth: str
-    threshold: str
+    depth: int
+    threshold: int
     tags_verified_path: str
-    src_paths: str
+    src_path: str
     tgt_path: str
 
 
