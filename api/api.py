@@ -20,10 +20,9 @@ def submit_tags_job(holder: SparkArgsHolder):
         holder.depth,
         holder.threshold,
         holder.tags_verified_path,
-        holder.src_paths,
+        holder.src_path,
         holder.tgt_path,
     ]
-
     output = subprocess.run(args=CMD)
 
     return output

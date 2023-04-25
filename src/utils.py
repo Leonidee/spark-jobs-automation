@@ -20,7 +20,7 @@ class SparkArgsHolder(BaseModel):
     depth: str
     threshold: str
     tags_verified_path: str
-    src_paths: list[str]
+    src_paths: str
     tgt_path: str
 
 

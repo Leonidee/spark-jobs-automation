@@ -4,3 +4,4 @@ logs
 plugins
 .env
 .pytest_cache
+.DS_Store

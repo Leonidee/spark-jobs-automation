@@ -13,7 +13,7 @@ Install supervisor Debian/Ubuntu:
 sudo apt install -y supervisor
 ```
 
-Copy supervisor config to config folder:
+Copy supervisor config from repository to config folder:
 
 ```shell
 sudo cp ./supervisor/api.conf /etc/supervisor/conf.d/api.conf
