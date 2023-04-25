@@ -243,8 +243,8 @@ class SparkSubmitter:
     def submit_tags_job(
         self,
         date: str,
-        depth: int,
-        threshold: int,
+        depth: int | str,
+        threshold: int | str,
         tags_verified_path: str,
         src_path: str,
         tgt_path: str,
@@ -265,8 +265,8 @@ class SparkSubmitter:
 
         args = dict(
             date=date,
-            depth=depth,
-            threshold=threshold,
+            depth=str(depth),
+            threshold=str(threshold),
             tags_verified_path=tags_verified_path,
             src_path=src_path,
             tgt_path=tgt_path,
@@ -274,7 +274,7 @@ class SparkSubmitter:
         logger.info("Requesting API to submit `tags` job.")
 
         logger.info(
-            f"Spark job args:\n`date` - {args['date']}\n`depth` - {args['depth']}\n`threshold` - {args['threshold']}"
+            f"Spark job args:\n\t`date`: {args['date']}\n\t`depth`: {args['depth']}\n\t`threshold`: {args['threshold']}"
         )
         args = json.dumps(args)
         logger.debug(args)
@@ -294,8 +294,8 @@ class SparkSubmitter:
             sys.exit(1)
 
         if response.status_code == 200:
-            logger.info("Response received")
-            logger.debug(response.json())
+            logger.info("Response received!")
+
             if response.json()["returncode"] == 0:
                 logger.info(
                     f"Spark Job was executed successfully! Results -> `{tgt_path}`"

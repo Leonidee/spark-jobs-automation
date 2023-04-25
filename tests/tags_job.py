@@ -22,8 +22,8 @@ spark = SparkSubmitter(api_base_url=FAST_API_BASE_URL)
 if __name__ == "__main__":
     spark.submit_tags_job(
         date="2022-01-19",
-        depth="10",
-        threshold="100",
+        depth=5,
+        threshold=20,
         tags_verified_path=TAGS_VERIFIED_PATH,
         src_path=SRC_PATH,
         tgt_path=TGT_PATH,
