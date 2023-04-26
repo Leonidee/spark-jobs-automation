@@ -9,7 +9,7 @@ os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
 os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
 os.environ["JAVA_HOME"] = "/usr/bin/java"
 os.environ["SPARK_HOME"] = "/usr/lib/spark"
-os.environ["PYTHONPATH"] = "/home/ubuntu/code/spark-jobs-automation/.venv/bin/python"
+os.environ["PYTHONPATH"] = "/opt/conda/bin/python3"
 
 findspark.init()
 findspark.find()
@@ -86,7 +86,7 @@ class SparkRunner:
             f"Writing parquet -> {tgt_path}/date={date}/candidates-d{depth}"
         )
         try:
-            tags.write.parquet(
+            tags.repartition(1).write.parquet(
                 path=f"{tgt_path}/date={date}/candidates-d{depth}",
                 mode="errorifexists",
                 compression="gzip",
@@ -96,7 +96,7 @@ class SparkRunner:
             self.logger.warning(
                 "Notice that file already exists on s3 and will be overwritten!"
             )
-            tags.write.parquet(
+            tags.repartition(1).write.parquet(
                 path=f"{tgt_path}/date={date}/candidates-d{depth}",
                 mode="overwrite",
                 compression="gzip",

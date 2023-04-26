@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 from pyspark.sql.utils import CapturedException
 
+
 sys.path.append(str(Path(__file__).parent.parent))
 
 from jobs import SparkRunner
@@ -47,11 +48,11 @@ def main() -> None:
             src_paths=PATHS,
             tgt_path=TGT_PATH,
         )
+        spark.stop_session()
     except CapturedException as e:
         logger.exception(e)
-        sys.exit(1)
-    finally:
         spark.stop_session()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
