@@ -4,7 +4,7 @@ from pyspark.sql.utils import CapturedException
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from jobs import SparkRunner
+from src.jobs import SparkRunner
 from src.logger import SparkLogger
 from src.utils import validate_job_submit_args, get_src_paths
 

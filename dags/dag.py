@@ -20,7 +20,7 @@ YC_DATAPROC_BASE_URL = os.getenv("YC_DATAPROC_BASE_URL")
 YC_OAUTH_TOKEN = os.getenv("YC_OAUTH_TOKEN")
 FAST_API_BASE_URL = os.getenv("FAST_API_BASE_URL")
 
-SPARK_REPORT_DATE = str(datetime.today().date())
+SPARK_REPORT_DATE = "2022-03-05"  # str(datetime.today().date())
 TAGS_VERIFIED_PATH = (
     "s3a://data-ice-lake-04/messager-data/snapshots/tags_verified/actual"
 )
@@ -30,7 +30,7 @@ TGT_PATH = "s3a://data-ice-lake-04/messager-data/analytics/tag-candidates"
 SUBMIT_TASK_DEFAULT_ARGS = {
     "retries": 3,
     "retry_delay": timedelta(seconds=45),
-    "depends_on_past": True,
+    "on_failure_callback": "stop_dataproc_cluster",
 }
 
 yc = YandexCloudAPI()
@@ -49,7 +49,6 @@ spark = SparkSubmitter(api_base_url=FAST_API_BASE_URL)
     default_args={
         "retries": 3,
         "retry_delay": timedelta(minutes=2),
-        "depends_on_past": True,
     }
 )
 def start_dataproc_cluster() -> None:
@@ -60,7 +59,6 @@ def start_dataproc_cluster() -> None:
     default_args={
         "retries": 1,
         "retry_delay": timedelta(minutes=1),
-        "depends_on_past": True,
     }
 )
 def wait_until_running() -> None:
@@ -69,7 +67,7 @@ def wait_until_running() -> None:
 
 @task(default_args=SUBMIT_TASK_DEFAULT_ARGS)
 def submit_tags_job_for_7d() -> None:
-    spark.do_tags_job(
+    spark.submit_tags_job(
         date=SPARK_REPORT_DATE,
         depth=7,
         threshold=50,
@@ -81,7 +79,7 @@ def submit_tags_job_for_7d() -> None:
 
 @task(default_args=SUBMIT_TASK_DEFAULT_ARGS)
 def submit_tags_job_for_60d() -> None:
-    spark.do_tags_job(
+    spark.submit_tags_job(
         date=SPARK_REPORT_DATE,
         depth=60,
         threshold=200,
@@ -95,7 +93,6 @@ def submit_tags_job_for_60d() -> None:
     default_args={
         "retries": 3,
         "retry_delay": timedelta(minutes=2),
-        "depends_on_past": True,
     }
 )
 def stop_dataproc_cluster() -> None:
@@ -106,7 +103,6 @@ def stop_dataproc_cluster() -> None:
     default_args={
         "retries": 1,
         "retry_delay": timedelta(minutes=1),
-        "depends_on_past": True,
     }
 )
 def wait_until_stopped() -> None:
@@ -123,7 +119,7 @@ def wait_until_stopped() -> None:
     default_args={
         "owner": "leonide",
     },
-    default_view="graph",
+    default_view="grid",
 )
 def taskflow() -> None:
     start = start_dataproc_cluster()

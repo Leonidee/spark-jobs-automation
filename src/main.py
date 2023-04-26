@@ -5,8 +5,18 @@ import sys
 
 from requests.exceptions import HTTPError, ConnectionError, InvalidSchema, Timeout
 import requests
+from pprint import pprint
 
-logger = getLogger("aiflow.task")
+# logger = getLogger("aiflow.task")
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent))
+
+from src.logger import SparkLogger
+
+logger = SparkLogger(level="DEBUG").get_logger(
+    logger_name=str(Path(Path(__file__).name))
+)
 
 
 class YandexCloudAPI:
@@ -204,7 +214,7 @@ class DataProcCluster:
                 response = response.json()
 
                 if "status" in response.keys():
-                    print(f"Current cluster status is: {response['status']}")
+                    logger.info(f"Current cluster status is: {response['status']}")
 
                     if response["status"].strip().lower() == "stopped":
                         logger.info("Cluster is stopped!")
@@ -270,7 +280,7 @@ class SparkSubmitter:
             f"Spark job args:\n\t`date`: {args['date']}\n\t`depth`: {args['depth']}\n\t`threshold`: {args['threshold']}"
         )
         args = json.dumps(args)
-        logger.debug(args)
+        logger.debug(f"POST request args: {args}")
 
         is_done = False
         try:
