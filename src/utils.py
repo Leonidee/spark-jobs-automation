@@ -1,18 +1,15 @@
 import sys
 import re
-from pathlib import Path
 from pydantic import BaseModel
 from botocore.exceptions import ClientError
 import boto3
 import os
-from typing import List, Literal, Union
+from typing import List, Literal
 from datetime import datetime, timedelta
+from logging import getLogger
 
 
-sys.path.append(str(Path(__file__).parent.parent))
-from src.logger import SparkLogger
-
-logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
+logger = getLogger("aiflow.task")
 
 
 class SparkArgsHolder(BaseModel):
