@@ -14,19 +14,22 @@ After receiving a response from the Cluster, regardless of the success of the jo
 
 # Technology and Architecture
 
-The process orchestrator is Airflow, deployed in Docker containers.
+The process orchestrator is [Airflow](https://github.com/apache/airflow), deployed in Docker containers.
 
-A Rest API service, implemented using the Fast API and Uvicorn frameworks, is used to receive requests in the cluster.
+A Rest API service, implemented using the [Fast API](https://github.com/tiangolo/fastapi) and [Uvicorn](https://github.com/encode/uvicorn) frameworks, is used to receive requests in the cluster.
 
-Apache Spark, deployed on a lightweight Hadoop cluster consisting only of a Master node and several compute nodes (without HDFS), is the primary data processing engine.
+[Apache Spark](https://github.com/apache/spark), deployed on a lightweight Hadoop cluster consisting only of a Master node and several compute nodes (without HDFS), is the primary data processing engine.
 
 S3 is the primary data storage, providing flexibility and cost-effectiveness for data storage.
 
+Cloud infrastructure provided by [Yandex Cloud](https://cloud.yandex.com/en-ru/).
 
 # How to use
 
 *Note*: You must have a Hadoop cluster prepared and configured. The project uses a cloud cluster from Yandex Cloud.
+
 *Note*: And you must also have an S3 baket, the paths to which must be specified in the variables of the `dag.py` file.
+
 *Note*: The project was implemented and tested only on Debian/Ubuntu OS.
 
 All credentials must be located in a `.env` file (you need to create one), which is automatically taken into all Docker containers with Airflow.
@@ -39,7 +42,7 @@ Clone the repository:
 git clone https://github.com/Leonidee/spark-jobs-automation.git
 ```
 
-#### Install dependencies
+### Install dependencies
 
 The project is adapted to work with [Poetry](https://github.com/python-poetry/poetry).
 
@@ -55,9 +58,9 @@ Install all dependencies listed in `pyproject.toml`:
 poetry install
 ```
 
-### On Hadoop Cluster Masternode
+## On Hadoop Cluster Masternode
 
-#### Configure Supervisor
+### Configure Supervisor
 
 Install:
 
@@ -77,17 +80,17 @@ And run:
 sudo service supervisor start
 ```
 
-### On Host with Airflow
+## On Host with Airflow
 
-#### Deploy Airflow
+### Deploy Airflow
 
-Init airflow
+Init airflow:
 
 ```shell
 docker compose up airflow-init
 ```
 
-And run containers:
+Run containers:
 
 ```shell
 docker compose up -d
