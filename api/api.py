@@ -14,7 +14,7 @@ app = FastAPI()
 @app.post("/submit_tags_job")
 def submit_tags_job(holder: SparkArgsHolder):
     CMD = [
-        "spark-submit",
+        "/usr/bin/spark-submit",
         "/home/ubuntu/code/spark-jobs-automation/jobs/tags_job.py",
         holder.date,
         holder.depth,
