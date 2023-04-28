@@ -22,6 +22,15 @@ class SparkArgsHolder(BaseModel):
 
 
 def load_environment(dotenv_file_name: str = ".env") -> bool:
+    """Find .env file and load environment variables from it\n
+    Will override system environment variables
+
+    Args:
+        dotenv_file_name (str, optional): Path to .env file. Defaults to ".env".
+
+    Returns:
+        bool: Returns True if found file and loaded variables and False in other case
+    """
     from dotenv import load_dotenv, find_dotenv
 
     logger.info("Loading .env file")
@@ -32,6 +41,7 @@ def load_environment(dotenv_file_name: str = ".env") -> bool:
                 filename=dotenv_file_name, raise_error_if_not_found=True
             ),
             verbose=True,
+            override=True,
         )
         is_loaded = True
         logger.info("Done")
@@ -43,6 +53,8 @@ def load_environment(dotenv_file_name: str = ".env") -> bool:
 
 
 def get_s3_instance():
+    "Get boto3 S3 connection instance"
+
     logger.info("Getting s3 connection instace")
 
     load_environment()
@@ -63,6 +75,11 @@ def get_src_paths(
     depth: int,
     src_path: str,
 ) -> List[str]:
+    """Get S3 paths contains dataset partitions for given arguments
+
+    Returns:
+        List[str]: List of S3 paths
+    """
     logger.info("Collecting src paths")
 
     date = datetime.strptime(date, "%Y-%m-%d").date()
@@ -104,6 +121,8 @@ def get_src_paths(
 
 
 def validate_job_submit_args(date: str, depth: int, threshold: int) -> None:
+    "Validate `tags-job` arguments for `spark-submit` command"
+
     logger.info("Validating given arguments: `date`, `depth` and `threshold`")
 
     if not re.match(pattern="^\d*$", string=str(depth)):

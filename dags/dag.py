@@ -2,7 +2,7 @@ import sys
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
-import configparser
+import yaml
 
 # airflow
 from airflow.decorators import task, dag
@@ -22,10 +22,10 @@ YC_OAUTH_TOKEN = os.getenv("YC_OAUTH_TOKEN")
 
 FAST_API_BASE_URL = os.getenv("FAST_API_BASE_URL")
 
-config = configparser.ConfigParser()
-config.read("jobs-config.toml")
+with open("jobs-config.yaml") as f:
+    config = yaml.safe_load(f)
 
-SPARK_REPORT_DATE = "2022-03-05"  # str(datetime.today().date())
+SPARK_REPORT_DATE = str(datetime.today().date())
 TAGS_VERIFIED_PATH = config["TAGS-JOB"]["TAGS_VERIFIED_PATH"]
 SRC_PATH = config["TAGS-JOB"]["SRC_PATH"]
 TGT_PATH = config["TAGS-JOB"]["TGT_PATH"]
@@ -49,11 +49,12 @@ spark = SparkSubmitter(api_base_url=FAST_API_BASE_URL)
 
 @task(
     default_args={
-        "retries": 4,
+        "retries": 3,
         "retry_delay": timedelta(seconds=30),
     },
 )
 def start_cluster() -> None:
+    "Start DataProc Cluster"
     cluster.start()
 
 
@@ -64,11 +65,13 @@ def start_cluster() -> None:
     },
 )
 def wait_until_cluster_running() -> None:
+    "Wait until Cluster is ready to use"
     cluster.is_running()
 
 
 @task(default_args=SUBMIT_TASK_DEFAULT_ARGS)
 def submit_tags_job_for_7d() -> None:
+    "Submit tags job for 7 days"
     spark.submit_tags_job(
         date=SPARK_REPORT_DATE,
         depth=7,
@@ -81,6 +84,7 @@ def submit_tags_job_for_7d() -> None:
 
 @task(default_args=SUBMIT_TASK_DEFAULT_ARGS)
 def submit_tags_job_for_60d() -> None:
+    "Submit tags job for 60 days"
     spark.submit_tags_job(
         date=SPARK_REPORT_DATE,
         depth=60,
@@ -93,23 +97,25 @@ def submit_tags_job_for_60d() -> None:
 
 @task(
     default_args={
-        "retries": 4,
+        "retries": 3,
         "retry_delay": timedelta(seconds=30),
     },
     trigger_rule="all_success",
 )
 def stop_cluster_success_way() -> None:
+    "Stop Cluster if every of upstream tasks successfully executed, if not - skipped"
     cluster.stop()
 
 
 @task(
     default_args={
-        "retries": 4,
+        "retries": 3,
         "retry_delay": timedelta(seconds=30),
     },
     trigger_rule="one_failed",
 )
 def stop_cluster_failed_way() -> None:
+    "Stop Cluster if one of the upstream tasks failed, if not - skipped"
     cluster.stop()
 
 
@@ -121,6 +127,7 @@ def stop_cluster_failed_way() -> None:
     trigger_rule="all_done",
 )
 def wait_until_cluster_stopped() -> None:
+    "Wait until Cluster is stopped"
     cluster.is_stopped()
 
 

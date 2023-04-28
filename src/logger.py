@@ -8,6 +8,11 @@ class SparkLogger(logging.Logger):
         self.level = level
 
     def get_logger(self, logger_name: str) -> logging.Logger:
+        """Return configured ready-for-use logger instance
+
+        Args:
+            logger_name (str): Name of logger
+        """
         logger = logging.getLogger(name=logger_name)
 
         coloredlogs.install(logger=logger, level=self.level)
