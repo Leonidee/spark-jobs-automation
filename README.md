@@ -96,7 +96,7 @@ Run containers:
 docker compose up -d
 ```
 
-Airflow will be available at `<your VM host>:8080/`
+UI Airflow will be available at `<your VM host>:8080/`
 
 By default, these credentials are used:
 Password: `airflow`
