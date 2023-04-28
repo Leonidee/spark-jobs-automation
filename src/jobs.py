@@ -24,6 +24,8 @@ from pyspark.sql.functions import (
     split,
 )
 
+logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
+
 
 class SparkRunner:
     def __init__(self, app_name: str):
