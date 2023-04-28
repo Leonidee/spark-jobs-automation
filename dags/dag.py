@@ -8,7 +8,6 @@ import configparser
 from airflow.decorators import task, dag
 from airflow.operators.empty import EmptyOperator
 from airflow.models.baseoperator import chain
-from airflow.utils.trigger_rule import TriggerRule
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
@@ -27,11 +26,9 @@ config = configparser.ConfigParser()
 config.read("jobs-config.toml")
 
 SPARK_REPORT_DATE = "2022-03-05"  # str(datetime.today().date())
-TAGS_VERIFIED_PATH = os.getenv(
-    "TAGS_VERIFIED_PATH"
-)  # config["TAGS-JOB"]["TAGS_VERIFIED_PATH"]
-SRC_PATH = os.getenv("SRC_PATH")  # config["TAGS-JOB"]["SRC_PATH"]
-TGT_PATH = os.getenv("TGT_PATH")  # config["TAGS-JOB"]["TGT_PATH"]
+TAGS_VERIFIED_PATH = config["TAGS-JOB"]["TAGS_VERIFIED_PATH"]
+SRC_PATH = config["TAGS-JOB"]["SRC_PATH"]
+TGT_PATH = config["TAGS-JOB"]["TGT_PATH"]
 
 SUBMIT_TASK_DEFAULT_ARGS = {
     "retries": 3,
@@ -54,9 +51,9 @@ spark = SparkSubmitter(api_base_url=FAST_API_BASE_URL)
     default_args={
         "retries": 4,
         "retry_delay": timedelta(seconds=30),
-    }
+    },
 )
-def start_dataproc_cluster() -> None:
+def start_cluster() -> None:
     cluster.start()
 
 
@@ -64,21 +61,10 @@ def start_dataproc_cluster() -> None:
     default_args={
         "retries": 3,
         "retry_delay": timedelta(minutes=2),
-    }
-)
-def wait_until_running() -> None:
-    cluster.is_running()
-
-
-@task(
-    default_args={
-        "retries": 3,
-        "retry_delay": timedelta(minutes=2),
     },
-    trigger_rule=TriggerRule.ONE_FAILED,
 )
-def stop_cluster_if_unknown_status() -> None:
-    cluster.stop()
+def wait_until_cluster_running() -> None:
+    cluster.is_running()
 
 
 @task(default_args=SUBMIT_TASK_DEFAULT_ARGS)
@@ -88,7 +74,7 @@ def submit_tags_job_for_7d() -> None:
         depth=7,
         threshold=50,
         tags_verified_path=TAGS_VERIFIED_PATH,
-        src_path="hui",
+        src_path=SRC_PATH,
         tgt_path=TGT_PATH,
     )
 
@@ -107,12 +93,12 @@ def submit_tags_job_for_60d() -> None:
 
 @task(
     default_args={
-        "retries": 3,
-        "retry_delay": timedelta(minutes=2),
+        "retries": 4,
+        "retry_delay": timedelta(seconds=30),
     },
-    trigger_rule=TriggerRule.ONE_FAILED,
+    trigger_rule="all_success",
 )
-def stop_cluster_if_failed_to_sumbit() -> None:
+def stop_cluster_success_way() -> None:
     cluster.stop()
 
 
@@ -120,9 +106,10 @@ def stop_cluster_if_failed_to_sumbit() -> None:
     default_args={
         "retries": 4,
         "retry_delay": timedelta(seconds=30),
-    }
+    },
+    trigger_rule="one_failed",
 )
-def stop_dataproc_cluster() -> None:
+def stop_cluster_failed_way() -> None:
     cluster.stop()
 
 
@@ -130,9 +117,10 @@ def stop_dataproc_cluster() -> None:
     default_args={
         "retries": 3,
         "retry_delay": timedelta(minutes=2),
-    }
+    },
+    trigger_rule="all_done",
 )
-def wait_until_stopped() -> None:
+def wait_until_cluster_stopped() -> None:
     cluster.is_stopped()
 
 
@@ -151,22 +139,29 @@ def wait_until_stopped() -> None:
 def taskflow() -> None:
     begin = EmptyOperator(task_id="begining")
 
-    start = start_dataproc_cluster()
-    is_running = wait_until_running()
-
-    stop_if_unkown = stop_cluster_if_unknown_status()
+    start = start_cluster()
+    is_running = wait_until_cluster_running()
 
     job_7d = submit_tags_job_for_7d()
     job_60d = submit_tags_job_for_60d()
 
-    stop_if_failed = stop_cluster_if_failed_to_sumbit()
+    stop_if_failed = stop_cluster_failed_way()
+    stop_if_success = stop_cluster_success_way()
 
-    stop = stop_dataproc_cluster()
-    is_stopped = wait_until_stopped()
+    is_stopped = wait_until_cluster_stopped()
 
     end = EmptyOperator(task_id="ending")
 
-    chain(begin, start, is_running, job_7d, job_60d, stop, is_stopped, end)
+    chain(
+        begin,
+        start,
+        is_running,
+        job_7d,
+        job_60d,
+        [stop_if_failed, stop_if_success],
+        is_stopped,
+        end,
+    )
 
 
 taskflow()
