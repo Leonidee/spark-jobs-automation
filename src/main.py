@@ -247,10 +247,8 @@ class SparkSubmitter:
     def submit_tags_job(self, holder: TagsJobArgsHolder) -> None:
         """Send request to API to submit tags job
 
-        # todo !
-
-        Returns:
-            bool: State of submited job. True if job submit successfully and False if failed #todo !
+        Args:
+            holder (TagsJobArgsHolder): Argument for submiting tags job inside `TagsJobArgsHolder` object
         """
 
         logger.info("Requesting API to submit `tags` job.")

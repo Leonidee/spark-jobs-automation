@@ -3,6 +3,7 @@ from pathlib import Path
 
 from pyspark.sql.utils import CapturedException
 
+# package
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.jobs import SparkRunner

@@ -10,23 +10,27 @@ from airflow.operators.empty import EmptyOperator
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
+from src.config import Config
 from src.main import DataProcCluster, SparkSubmitter, YandexCloudAPI
-from src.utils import Config, load_environment
+from src.utils import TagsJobArgsHolder, load_environment
 
 load_environment()
 
 YC_DATAPROC_CLUSTER_ID = os.getenv("YC_DATAPROC_CLUSTER_ID")
 YC_DATAPROC_BASE_URL = os.getenv("YC_DATAPROC_BASE_URL")
 YC_OAUTH_TOKEN = os.getenv("YC_OAUTH_TOKEN")
-
 FAST_API_BASE_URL = os.getenv("FAST_API_BASE_URL")
 
 config = Config()
 
-SPARK_REPORT_DATE = str(datetime.today().date())
-TAGS_VERIFIED_PATH = config.tags_job_config["TAGS_VERIFIED_PATH"]
-SRC_PATH = config.tags_job_config["SRC_PATH"]
-TGT_PATH = config.tags_job_config["TGT_PATH"]
+tags_job_args = TagsJobArgsHolder(
+    date="2022-03-24",
+    depth=7,
+    threshold=50,
+    tags_verified_path=config.tags_job_config["TAGS_VERIFIED_PATH"],
+    src_path=config.tags_job_config["SRC_PATH"],
+    tgt_path=config.tags_job_config["TGT_PATH"],
+)
 
 SUBMIT_TASK_DEFAULT_ARGS = {
     "retries": 3,
@@ -70,27 +74,17 @@ def wait_until_cluster_running() -> None:
 @task(default_args=SUBMIT_TASK_DEFAULT_ARGS)
 def submit_tags_job_for_7d() -> None:
     "Submit tags job for 7 days"
-    spark.submit_tags_job(
-        date=SPARK_REPORT_DATE,
-        depth=7,
-        threshold=50,
-        tags_verified_path=TAGS_VERIFIED_PATH,
-        src_path=SRC_PATH,
-        tgt_path=TGT_PATH,
-    )
+
+    spark.submit_tags_job(holder=tags_job_args)
 
 
 @task(default_args=SUBMIT_TASK_DEFAULT_ARGS)
 def submit_tags_job_for_60d() -> None:
     "Submit tags job for 60 days"
-    spark.submit_tags_job(
-        date=SPARK_REPORT_DATE,
-        depth=60,
-        threshold=200,
-        tags_verified_path=TAGS_VERIFIED_PATH,
-        src_path=SRC_PATH,
-        tgt_path=TGT_PATH,
-    )
+    tags_job_args.depth = 60
+    tags_job_args.threshold = 200
+
+    spark.submit_tags_job(tags_job_args)
 
 
 @task(

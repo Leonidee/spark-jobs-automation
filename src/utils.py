@@ -2,7 +2,6 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta
-from logging import getLogger
 from pathlib import Path
 from typing import List, Literal
 
@@ -88,11 +87,14 @@ def get_src_paths(
     event_type: Literal["message", "reaction", "subscription"],
     holder: TagsJobArgsHolder,
 ) -> List[str]:
-    """Get S3 paths contains dataset partitions for given arguments
+    """Get S3 paths contains dataset partitions for arguments in `TagsJobArgsHolder` object
 
     Returns:
         List[str]: List of S3 paths
     """
+
+    s3 = get_s3_instance()
+
     logger.info("Collecting src paths")
 
     date = datetime.strptime(holder.date, "%Y-%m-%d").date()
@@ -104,8 +106,6 @@ def get_src_paths(
     ]
 
     logger.info("Checking if each path exists on s3")
-
-    s3 = get_s3_instance()
 
     existing_paths = []
     for path in paths:
@@ -138,9 +138,9 @@ class SparkArgsValidator:
         ...
 
     def validate_tags_job_args(self, holder: TagsJobArgsHolder) -> None:
-        "Validate `tags-job` arguments for `spark-submit` command"
+        "Validate given arguments in `TagsJobArgsHolder` object"
 
-        logger.info("Validating given arguments: `date`, `depth` and `threshold`")
+        logger.info("Validating `TagsJobArgsHolder`")
 
         if not re.match(pattern="^\d*$", string=str(holder.depth)):
             raise AssertionError(

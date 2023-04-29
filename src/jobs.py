@@ -28,7 +28,14 @@ from pyspark.sql.functions import (
 
 
 class SparkRunner:
-    def __init__(self, app_name: str):
+    def __init__(self, app_name: str) -> None:
+        """Main class that submit Spark jobs
+
+        Each method does different job
+
+        Args:
+            app_name (str): Name of Spark Application
+        """
         self.logger = SparkLogger().get_logger(
             logger_name=str(Path(Path(__file__).name))
         )
@@ -37,7 +44,8 @@ class SparkRunner:
         self.spark.sparkContext.setLogLevel("WARN")
         self.logger.info("Initializing Spark Session")
 
-    def stop_session(self):
+    def stop_session(self) -> None:
+        """Stop active Spark Session"""
         self.logger.info("Stopping Spark Session")
         self.spark.stop()
         self.logger.info("Session stopped")
@@ -47,6 +55,12 @@ class SparkRunner:
         holder: TagsJobArgsHolder,
         src_paths: List[str],
     ) -> None:
+        """Submit `tags-job`
+
+        Args:
+            holder (TagsJobArgsHolder): Object with Spark Job arguments
+            src_paths (List[str]): S3 paths
+        """
         self.logger.info(f"Starting tags job")
 
         self.logger.info("Getting `messages` dataset from s3")
