@@ -25,6 +25,7 @@ FAST_API_BASE_URL = os.getenv("FAST_API_BASE_URL")
 
 
 if __name__ == "__main__":
+    spark = SparkSubmitter(api_base_url=FAST_API_BASE_URL)
     holder = TagsJobArgsHolder(
         date=SPARK_REPORT_DATE,
         depth=2,
@@ -33,8 +34,4 @@ if __name__ == "__main__":
         src_path=SRC_PATH,
         tgt_path=TGT_PATH,
     )
-    print(f"BEFORE: {holder.depth}")
-
-    holder.depth = 10000
-    holder.threshold = 10000000
-    print(f"AFTER: {holder.depth}")
+    spark.submit_tags_job(holder=holder)
