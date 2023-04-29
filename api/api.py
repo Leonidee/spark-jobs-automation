@@ -1,24 +1,25 @@
-from fastapi import FastAPI
-import uvicorn
 import subprocess
 import sys
 from pathlib import Path
 
+import uvicorn
+from fastapi import FastAPI
+
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.utils import SparkArgsHolder
+from src.utils import TagsJobArgsHolder
 
 app = FastAPI()
 
 
 @app.post("/submit_tags_job")
-def submit_tags_job(holder: SparkArgsHolder):
+def submit_tags_job(holder: TagsJobArgsHolder):
     CMD = [
         "/usr/bin/spark-submit",
         "/home/ubuntu/code/spark-jobs-automation/jobs/tags_job.py",
         holder.date,
-        holder.depth,
-        holder.threshold,
+        str(holder.depth),
+        str(holder.threshold),
         holder.tags_verified_path,
         holder.src_path,
         holder.tgt_path,

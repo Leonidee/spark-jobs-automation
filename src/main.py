@@ -1,15 +1,15 @@
-from time import sleep
-import json
-from logging import getLogger
 import sys
+from logging import getLogger
 from pathlib import Path
+from time import sleep
 
-from requests.exceptions import HTTPError, ConnectionError, InvalidSchema, Timeout
 import requests
+from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeout
 
 sys.path.append(str(Path(__file__).parent.parent))
+from src.config import Config
 from src.logger import SparkLogger
-from src.utils import Config
+from src.utils import TagsJobArgsHolder
 
 config = Config()
 
@@ -244,51 +244,25 @@ class SparkSubmitter:
         self.api_base_url = api_base_url
         self.session_timeout = session_timeout
 
-    def submit_tags_job(
-        self,
-        date: str,
-        depth: int | str,
-        threshold: int | str,
-        tags_verified_path: str,
-        src_path: str,
-        tgt_path: str,
-    ) -> None:
+    def submit_tags_job(self, holder: TagsJobArgsHolder) -> None:
         """Send request to API to submit tags job
 
-        Args:
-            date (str): Report start date. Format: YYYY-MM-DD
-            depth (int): Report lenght in days. Report start date minus depth
-            threshold (int): Users threshold
-            tags_verified_path (str): s3 path with  tags_verified dataset. Tags from this dataset will be exluded from result
-            src_path (str): s3 path with source dataset partitions
-            tgt_path (str): s3 path where Spark will store the results
+        # todo !
 
         Returns:
-            bool: State of submited job. True if job submit successfully and False if failed
+            bool: State of submited job. True if job submit successfully and False if failed #todo !
         """
 
-        args = dict(
-            date=date,
-            depth=str(depth),
-            threshold=str(threshold),
-            tags_verified_path=tags_verified_path,
-            src_path=src_path,
-            tgt_path=tgt_path,
-        )
         logger.info("Requesting API to submit `tags` job.")
 
-        logger.info(
-            f"Spark job args:\n\t`date`: {args['date']}\n\t`depth`: {args['depth']}\n\t`threshold`: {args['threshold']}"
-        )
-        args = json.dumps(args)
-        logger.debug(f"POST request args: {args}")
+        logger.info(f"Spark job args:\n{holder}")
 
         try:
             logger.info("Processing...")
             response = requests.post(
                 url=f"{self.api_base_url}/submit_tags_job",
                 timeout=self.session_timeout,
-                data=args,
+                data=holder.json(),
             )
             response.raise_for_status()
 
@@ -304,7 +278,7 @@ class SparkSubmitter:
             if "returncode" and "stdout" and "stderr" in response.keys():
                 if response["returncode"] == 0:
                     logger.info(
-                        f"Spark Job was executed successfully! Results -> `{tgt_path}`"
+                        f"Spark Job was executed successfully! Results -> `{holder.tgt_path}`"
                     )
                     logger.info(f"Job stdout:\n{response['stdout']}")
                     logger.info(f"Job stderr:\n{response['stderr']}")

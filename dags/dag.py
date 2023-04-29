@@ -1,17 +1,17 @@
-import sys
 import os
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
 # airflow
-from airflow.decorators import task, dag
-from airflow.operators.empty import EmptyOperator
+from airflow.decorators import dag, task
 from airflow.models.baseoperator import chain
+from airflow.operators.empty import EmptyOperator
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.main import YandexCloudAPI, DataProcCluster, SparkSubmitter
-from src.utils import load_environment, Config
+from src.main import DataProcCluster, SparkSubmitter, YandexCloudAPI
+from src.utils import Config, load_environment
 
 load_environment()
 

@@ -1,9 +1,11 @@
 import os
-import findspark
-from typing import List
 from pathlib import Path
+from typing import List
+
+import findspark
 
 from src.logger import SparkLogger
+from src.utils import TagsJobArgsHolder
 
 os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
 os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
@@ -17,14 +19,12 @@ findspark.find()
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col,
-    explode,
     count_distinct,
-    trim,
-    to_timestamp,
+    explode,
     split,
+    to_timestamp,
+    trim,
 )
-
-logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
 
 
 class SparkRunner:
@@ -44,12 +44,8 @@ class SparkRunner:
 
     def do_tags_job(
         self,
-        date: str,
-        depth: int,
-        threshold: int,
+        holder: TagsJobArgsHolder,
         src_paths: List[str],
-        tags_verified_path: str,
-        tgt_path: str,
     ) -> None:
         self.logger.info(f"Starting tags job")
 
@@ -58,7 +54,7 @@ class SparkRunner:
         self.logger.info(f"Done. Rows in dataset {messages.count()}.")
 
         self.logger.info("Getting `tags_verified` dataset from s3")
-        tags_verified = self.spark.read.parquet(tags_verified_path)
+        tags_verified = self.spark.read.parquet(holder.tags_verified_path)
         self.logger.info("Done.")
 
         self.logger.info("Preparing `tags_verified`")
@@ -76,7 +72,7 @@ class SparkRunner:
             .select(col("message_from"), col("tag"))
             .groupBy(col("tag"))
             .agg(count_distinct(messages.message_from).alias("suggested_count"))
-            .where(col("suggested_count") >= threshold)
+            .where(col("suggested_count") >= holder.threshold)
         )
         self.logger.info(f"Done. Rows in dataset: {all_tags.count()}")
 
@@ -85,11 +81,11 @@ class SparkRunner:
         self.logger.info(f"Done. Rows in dataset: {tags.count()}")
 
         self.logger.info(
-            f"Writing parquet -> {tgt_path}/date={date}/candidates-d{depth}"
+            f"Writing parquet -> {holder.tgt_path}/date={holder.date}/candidates-d{holder.depth}"
         )
         try:
             tags.repartition(1).write.parquet(
-                path=f"{tgt_path}/date={date}/candidates-d{depth}",
+                path=f"{holder.tgt_path}/date={holder.date}/candidates-d{holder.depth}",
                 mode="errorifexists",
                 compression="gzip",
             )
@@ -99,7 +95,7 @@ class SparkRunner:
                 "Notice that file already exists on s3 and will be overwritten!"
             )
             tags.repartition(1).write.parquet(
-                path=f"{tgt_path}/date={date}/candidates-d{depth}",
+                path=f"{holder.tgt_path}/date={holder.date}/candidates-d{holder.depth}",
                 mode="overwrite",
                 compression="gzip",
             )
