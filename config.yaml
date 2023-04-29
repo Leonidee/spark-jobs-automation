@@ -1,0 +1,8 @@
+environ:
+  IS_PROD: False
+
+spark:
+  tags-job:
+    TAGS_VERIFIED_PATH: s3a://data-ice-lake-04/messager-data/snapshots/tags_verified/actual
+    SRC_PATH: s3a://data-ice-lake-04/messager-data/analytics/cleaned-events
+    TGT_PATH: s3a://data-ice-lake-04/messager-data/analytics/tag-candidates

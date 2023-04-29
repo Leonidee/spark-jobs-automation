@@ -2,11 +2,22 @@ from time import sleep
 import json
 from logging import getLogger
 import sys
+from pathlib import Path
 
 from requests.exceptions import HTTPError, ConnectionError, InvalidSchema, Timeout
 import requests
 
-logger = getLogger("aiflow.task")
+sys.path.append(str(Path(__file__).parent.parent))
+from src.logger import SparkLogger
+from src.utils import Config
+
+config = Config()
+
+logger = (
+    getLogger("aiflow.task")
+    if config.IS_PROD
+    else SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
+)
 
 
 class YandexCloudAPI:
@@ -241,7 +252,7 @@ class SparkSubmitter:
         tags_verified_path: str,
         src_path: str,
         tgt_path: str,
-    ) -> bool:
+    ) -> None:
         """Send request to API to submit tags job
 
         Args:
@@ -272,7 +283,6 @@ class SparkSubmitter:
         args = json.dumps(args)
         logger.debug(f"POST request args: {args}")
 
-        is_done = False
         try:
             logger.info("Processing...")
             response = requests.post(
@@ -289,12 +299,23 @@ class SparkSubmitter:
         if response.status_code == 200:
             logger.info("Response received!")
 
-            if response.json()["returncode"] == 0:
-                logger.info(
-                    f"Spark Job was executed successfully! Results -> `{tgt_path}`"
-                )
-                is_done = True
-                return is_done
+            response = response.json()
+
+            if "returncode" and "stdout" and "stderr" in response.keys():
+                if response["returncode"] == 0:
+                    logger.info(
+                        f"Spark Job was executed successfully! Results -> `{tgt_path}`"
+                    )
+                    logger.info(f"Job stdout:\n{response['stdout']}")
+                    logger.info(f"Job stderr:\n{response['stderr']}")
+
+                else:
+                    logger.error(
+                        "Unable to submit spark job! API returned non-zero code"
+                    )
+                    logger.error(f"Job stdout:\n{response['stdout']}")
+                    logger.error(f"Job stderr:\n{response['stderr']}")
+                    sys.exit(1)
             else:
-                logger.error("Unable to submit spark job! API returned non-zero code")
+                logger.error("API returned incorrect response! Something went wrong")
                 sys.exit(1)

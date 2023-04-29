@@ -2,7 +2,6 @@ import sys
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
-import yaml
 
 # airflow
 from airflow.decorators import task, dag
@@ -12,7 +11,7 @@ from airflow.models.baseoperator import chain
 # package
 sys.path.append(str(Path(__file__).parent.parent))
 from src.main import YandexCloudAPI, DataProcCluster, SparkSubmitter
-from src.utils import load_environment
+from src.utils import load_environment, Config
 
 load_environment()
 
@@ -22,13 +21,12 @@ YC_OAUTH_TOKEN = os.getenv("YC_OAUTH_TOKEN")
 
 FAST_API_BASE_URL = os.getenv("FAST_API_BASE_URL")
 
-with open("jobs-config.yaml") as f:
-    config = yaml.safe_load(f)
+config = Config()
 
 SPARK_REPORT_DATE = str(datetime.today().date())
-TAGS_VERIFIED_PATH = config["TAGS-JOB"]["TAGS_VERIFIED_PATH"]
-SRC_PATH = config["TAGS-JOB"]["SRC_PATH"]
-TGT_PATH = config["TAGS-JOB"]["TGT_PATH"]
+TAGS_VERIFIED_PATH = config.tags_job_config["TAGS_VERIFIED_PATH"]
+SRC_PATH = config.tags_job_config["SRC_PATH"]
+TGT_PATH = config.tags_job_config["TGT_PATH"]
 
 SUBMIT_TASK_DEFAULT_ARGS = {
     "retries": 3,
