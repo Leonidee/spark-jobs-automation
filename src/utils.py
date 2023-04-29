@@ -37,7 +37,7 @@ class Config:
 
     @IS_PROD.deleter
     def IS_PROD(self) -> None:
-        del self._is_prod
+        self._is_prod = None
 
     @property
     def tags_job_config(self) -> dict:
