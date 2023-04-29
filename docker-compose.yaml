@@ -60,14 +60,14 @@ x-airflow-common:
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
-    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-python-dotenv==1.0.0 boto3==1.26.117 requests==2.28.2 pydantic==1.10.7 pyyaml}
+    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-python-dotenv==1.0.0 boto3==1.26.117 requests==2.28.2 pydantic==1.10.7 pyyaml coloredlogs}
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
     - ${AIRFLOW_PROJ_DIR:-.}/src:/opt/airflow/src
     - ${AIRFLOW_PROJ_DIR:-.}/.env:/opt/airflow/.env
-    - ${AIRFLOW_PROJ_DIR:-.}/jobs-config.yaml:/opt/airflow/jobs-config.yaml
+    - ${AIRFLOW_PROJ_DIR:-.}/config.yaml:/opt/airflow/config.yaml
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
