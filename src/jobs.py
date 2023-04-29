@@ -1,8 +1,9 @@
 import os
 import sys
+from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, List, Literal
+from typing import Any, Literal
 
 import boto3
 import findspark
@@ -33,13 +34,7 @@ from pyspark.sql.functions import (
 
 class SparkRunner:
     def __init__(self) -> None:
-        """Main class that submit Spark jobs
-
-        Each method does different job
-
-        Args:
-            app_name (str): Name of Spark Application
-        """
+        """Main data processor class"""
         self.logger = SparkLogger().get_logger(
             logger_name=str(Path(Path(__file__).name))
         )
@@ -65,7 +60,7 @@ class SparkRunner:
         self,
         event_type: Literal["message", "reaction", "subscription"],
         holder: Any,
-    ) -> List[str]:
+    ) -> deque[str]:
         """Get S3 paths contains dataset partitions
 
         Collects paths corresponding to the passed in `holder` object arguments and checks if each path exists on S3. Collects only existing paths.
@@ -76,7 +71,7 @@ class SparkRunner:
             holder (Any): `pydantic.BaseModel` like object with Spark Job arguments
 
         Returns:
-            List[str]: List of S3 path
+            collections.deque[str]: Queue of S3 path
         """
         s3 = self._get_s3_instance()
 
@@ -92,7 +87,7 @@ class SparkRunner:
 
         self.logger.info("Checking if each path exists on s3")
 
-        existing_paths = []
+        existing_paths = deque()
         for path in paths:
             try:
                 response = s3.list_objects(
@@ -108,8 +103,8 @@ class SparkRunner:
                 self.logger.exception(e)
                 sys.exit(1)
 
-        # if returns empty list - exit
-        if existing_paths == []:
+        # if returns empty queue - exit
+        if existing_paths == deque():
             self.logger.error("There is no data for given arguments!")
             sys.exit(1)
 
@@ -118,6 +113,11 @@ class SparkRunner:
         return existing_paths
 
     def _init_session(self, app_name: str) -> None:
+        """Configure and initialize Spark Session
+
+        Args:
+            app_name (str): Name of Spark Application
+        """
         self.logger.info("Initializing Spark Session")
 
         self.spark = SparkSession.builder.master("yarn").appName(app_name).getOrCreate()

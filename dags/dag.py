@@ -37,11 +37,10 @@ SUBMIT_TASK_DEFAULT_ARGS = {
     "retry_delay": timedelta(seconds=45),
 }
 
-yc = YandexCloudAPI()
-token = yc.get_iam_token(oauth_token=YC_OAUTH_TOKEN)
+IAM_TOKEN = YandexCloudAPI().get_iam_token(oauth_token=YC_OAUTH_TOKEN)
 
 cluster = DataProcCluster(
-    token=token,
+    token=IAM_TOKEN,
     cluster_id=YC_DATAPROC_CLUSTER_ID,
     base_url=YC_DATAPROC_BASE_URL,
     max_attempts_to_check_status=20,

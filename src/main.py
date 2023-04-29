@@ -86,12 +86,8 @@ class DataProcCluster:
         self.base_url = base_url
         self.max_attempts_to_check_status = max_attempts_to_check_status
 
-    def start(self) -> bool:
-        """Send request to start Cluster
-
-        Returns:
-            bool: True if request was sent successfully and False if not
-        """
+    def start(self) -> None:
+        """Send request to start DataProc Cluster"""
         logger.info("Starting Cluster")
 
         try:
@@ -105,7 +101,6 @@ class DataProcCluster:
 
             if response.status_code == 200:
                 logger.info("Request was sent")
-                return True
 
         except (HTTPError, InvalidSchema) as e:
             logger.error(e)
@@ -115,12 +110,8 @@ class DataProcCluster:
             logger.exception(e)
             sys.exit(1)
 
-    def stop(self) -> bool:
-        """Send request to stop Cluster
-
-        Returns:
-            bool: True if request was sent successfully and False if not
-        """
+    def stop(self) -> None:
+        """Send request to stop DataProc Cluster"""
         logger.info("Stopping Cluster")
         try:
             logger.info("Sending request to API")
@@ -132,7 +123,6 @@ class DataProcCluster:
 
             if response.status_code == 200:
                 logger.info("Request was sent")
-                return True
 
         except (HTTPError, InvalidSchema) as e:
             logger.error(e)
@@ -147,12 +137,12 @@ class DataProcCluster:
         Waits until cluster status will be `RUNNING`. \n
         If current attempt greater then `max_attempts_to_check_status` attribute will exit with 1 status code
         """
+        logger.info("Requesting Cluster status...")
+
         is_active = False
         i = 1
 
-        logger.info("Requesting Cluster status...")
-
-        while is_active == False:
+        while not is_active:
             try:
                 response = requests.get(
                     url=f"{self.base_url}/{self.cluster_id}",
@@ -170,13 +160,14 @@ class DataProcCluster:
             if response.status_code == 200:
                 response = response.json()
 
-                if "status" in response.keys():
-                    logger.info(f"Current cluster status is: {response['status']}")
+                logger.info(
+                    f"Current cluster status is: {response.get('status', 'unknown')}"
+                )
 
-                    if response["status"].strip().lower() == "running":
-                        logger.info("Cluster is ready!")
-                        is_active = True
-                        return is_active
+                if response["status"].strip().lower() == "running":
+                    logger.info("Cluster is ready!")
+                    is_active = True
+
             if i == self.max_attempts_to_check_status:
                 logger.error(
                     "No more attemts left to check Cluster status! Cluster status is unknown."
@@ -191,12 +182,13 @@ class DataProcCluster:
         Waits until cluster status will be `STOPPED`. \n
         If current attempt greater then `max_attempts_to_check_status` attribute will exit with 1 status code
         """
-        is_stopped = False
-        i = 1
 
         logger.info("Requesting Cluster status...")
 
-        while is_stopped == False:
+        is_stopped = False
+        i = 1
+
+        while not is_stopped:
             try:
                 response = requests.get(
                     url=f"{self.base_url}/{self.cluster_id}",
@@ -214,13 +206,14 @@ class DataProcCluster:
             if response.status_code == 200:
                 response = response.json()
 
-                if "status" in response.keys():
-                    logger.info(f"Current cluster status is: {response['status']}")
+                logger.info(
+                    f"Current cluster status is: {response.get('status', 'unknown')}"
+                )
 
-                    if response["status"].strip().lower() == "stopped":
-                        logger.info("Cluster is stopped!")
-                        is_stopped = True
-                        return is_stopped
+                if response["status"].strip().lower() == "stopped":
+                    logger.info("Cluster is stopped!")
+
+                    is_stopped = True
 
             if i == self.max_attempts_to_check_status:
                 logger.error(
@@ -273,21 +266,15 @@ class SparkSubmitter:
 
             response = response.json()
 
-            if "returncode" and "stdout" and "stderr" in response.keys():
-                if response["returncode"] == 0:
-                    logger.info(
-                        f"Spark Job was executed successfully! Results -> `{holder.tgt_path}`"
-                    )
-                    logger.info(f"Job stdout:\n{response['stdout']}")
-                    logger.info(f"Job stderr:\n{response['stderr']}")
+            if response.get("returncode") == 0:
+                logger.info(
+                    f"Spark Job was executed successfully! Results -> `{holder.tgt_path}`"
+                )
+                logger.info(f"Job stdout:\n{response.get('stdout')}")
+                logger.info(f"Job stderr:\n{response.get('stderr')}")
 
-                else:
-                    logger.error(
-                        "Unable to submit spark job! API returned non-zero code"
-                    )
-                    logger.error(f"Job stdout:\n{response['stdout']}")
-                    logger.error(f"Job stderr:\n{response['stderr']}")
-                    sys.exit(1)
             else:
-                logger.error("API returned incorrect response! Something went wrong")
+                logger.error("Unable to submit spark job! API returned non-zero code")
+                logger.error(f"Job stdout:\n{response.get('stdout')}")
+                logger.error(f"Job stderr:\n{response.get('stderr')}")
                 sys.exit(1)
