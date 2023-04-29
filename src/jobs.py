@@ -138,7 +138,11 @@ class SparkRunner:
         Args:
             holder (TagsJobArgsHolder): Object with Spark Job arguments
         """
-        self.validator.validate_tags_job_args(holder=holder)
+        try:
+            self.validator.validate_tags_job_args(holder=holder)
+        except AssertionError as e:
+            self.logger.exception(e)
+            sys.exit(1)
 
         src_paths = self._get_src_paths(event_type="message", holder=holder)
 

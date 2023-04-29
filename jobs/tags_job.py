@@ -8,10 +8,9 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from src.jobs import SparkRunner
 from src.logger import SparkLogger
-from src.utils import SparkArgsValidator, TagsJobArgsHolder, get_src_paths
+from src.utils import TagsJobArgsHolder
 
 logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
-validator = SparkArgsValidator()
 
 
 def main() -> None:
@@ -33,18 +32,9 @@ def main() -> None:
         sys.exit(1)
 
     try:
-        validator.validate_tags_job_args(holder=holder)
-    except AssertionError as e:
-        logger.exception(e)
-        sys.exit(1)
-
-    PATHS = get_src_paths(event_type="message", holder=holder)
-
-    try:
-        spark = SparkRunner(app_name="APP")
+        spark = SparkRunner()
         spark.do_tags_job(
             holder=holder,
-            src_paths=PATHS,
         )
         spark.stop_session()
     except CapturedException as e:
