@@ -18,8 +18,8 @@ def main() -> None:
             raise KeyError
 
         DATE = str(sys.argv[1])
-        DEPTH = int(sys.argv[2])
-        THRESHOLD = int(sys.argv[3])
+        DEPTH = str(sys.argv[2])
+        THRESHOLD = str(sys.argv[3])
         VERIFIED_TAGS_PATH = str(sys.argv[4])
         SRC_PATH = str(sys.argv[5])
         TGT_PATH = str(sys.argv[6])
@@ -35,15 +35,15 @@ def main() -> None:
         sys.exit(1)
 
     PATHS = get_src_paths(
-        event_type="message", date=DATE, depth=DEPTH, src_path=SRC_PATH
+        event_type="message", date=DATE, depth=int(DEPTH), src_path=SRC_PATH
     )
 
     try:
         spark = SparkRunner(app_name="APP")
         spark.do_tags_job(
             date=DATE,
-            depth=DEPTH,
-            threshold=THRESHOLD,
+            depth=int(DEPTH),
+            threshold=int(THRESHOLD),
             tags_verified_path=VERIFIED_TAGS_PATH,
             src_paths=PATHS,
             tgt_path=TGT_PATH,
