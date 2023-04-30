@@ -36,9 +36,10 @@ def main() -> None:
         spark.do_tags_job(
             holder=holder,
         )
-        spark.stop_session()
     except CapturedException as e:
         logger.exception(e)
+
+    finally:
         spark.stop_session()
         sys.exit(1)
 
