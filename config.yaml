@@ -1,5 +1,5 @@
 environ:
-  IS_PROD: False
+  IS_PROD: True
 
 spark:
   tags-job:

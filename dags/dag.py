@@ -3,6 +3,8 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import requests
+
 # airflow
 from airflow.decorators import dag, task
 from airflow.models.baseoperator import chain
@@ -19,7 +21,11 @@ load_environment()
 YC_DATAPROC_CLUSTER_ID = os.getenv("YC_DATAPROC_CLUSTER_ID")
 YC_DATAPROC_BASE_URL = os.getenv("YC_DATAPROC_BASE_URL")
 YC_OAUTH_TOKEN = os.getenv("YC_OAUTH_TOKEN")
+
 FAST_API_BASE_URL = os.getenv("FAST_API_BASE_URL")
+
+TG_CHAT_ID = os.getenv("TG_CHAT_ID")
+TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN")
 
 config = Config()
 
@@ -32,10 +38,6 @@ tags_job_args = TagsJobArgsHolder(
     tgt_path=config.tags_job_config["TGT_PATH"],
 )
 
-SUBMIT_TASK_DEFAULT_ARGS = {
-    "retries": 3,
-    "retry_delay": timedelta(seconds=45),
-}
 
 IAM_TOKEN = YandexCloudAPI().get_iam_token(oauth_token=YC_OAUTH_TOKEN)
 
@@ -70,14 +72,24 @@ def wait_until_cluster_running() -> None:
     cluster.is_running()
 
 
-@task(default_args=SUBMIT_TASK_DEFAULT_ARGS)
+@task(
+    default_args={
+        "retries": 3,
+        "retry_delay": timedelta(seconds=45),
+    }
+)
 def submit_tags_job_for_7d() -> None:
     "Submit tags job for 7 days"
 
     spark.submit_tags_job(holder=tags_job_args)
 
 
-@task(default_args=SUBMIT_TASK_DEFAULT_ARGS)
+@task(
+    default_args={
+        "retries": 3,
+        "retry_delay": timedelta(seconds=45),
+    }
+)
 def submit_tags_job_for_60d() -> None:
     "Submit tags job for 60 days"
     tags_job_args.depth = 60

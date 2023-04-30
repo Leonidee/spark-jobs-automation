@@ -1,5 +1,6 @@
 import sys
 from logging import getLogger
+from os import getenv
 from pathlib import Path
 from time import sleep
 
@@ -9,9 +10,10 @@ from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeo
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config
 from src.logger import SparkLogger
-from src.utils import TagsJobArgsHolder
+from src.utils import TagsJobArgsHolder, load_environment
 
 config = Config()
+load_environment()
 
 logger = (
     getLogger("aiflow.task")
@@ -24,9 +26,9 @@ class YandexCloudAPI:
     "Instance for interaction with Yandex Cloud Rest API"
 
     def __init__(self) -> None:
-        ...
+        self.oauth_token = getenv("YC_OAUTH_TOKEN")
 
-    def get_iam_token(self, oauth_token: str) -> str:
+    def get_iam_token(self) -> str:
         """
         Get IAM token by specifying OAuth token
 
@@ -41,7 +43,7 @@ class YandexCloudAPI:
         try:
             response = requests.post(
                 url="https://iam.api.cloud.yandex.net/iam/v1/tokens",
-                json={"yandexPassportOauthToken": oauth_token},
+                json={"yandexPassportOauthToken": self.oauth_token},
                 timeout=60 * 2,
             )
             response.raise_for_status()
@@ -67,9 +69,7 @@ class YandexCloudAPI:
 class DataProcCluster:
     def __init__(
         self,
-        token: str,
-        cluster_id: str,
-        base_url: str,
+        iam_token: str,
         max_attempts_to_check_status: int = 10,
     ) -> None:
         """
@@ -81,10 +81,10 @@ class DataProcCluster:
             base_url (str): API base url
             max_attempts_to_check_status (int, optional): Max number of attempts to check if cluster running or stopped. Defaults to 10.
         """
-        self.token = token
-        self.cluster_id = cluster_id
-        self.base_url = base_url
+        self.token = iam_token
         self.max_attempts_to_check_status = max_attempts_to_check_status
+        self.cluster_id = getenv("YC_DATAPROC_CLUSTER_ID")
+        self.base_url = getenv("YC_DATAPROC_BASE_URL")
 
     def start(self) -> None:
         """Send request to start DataProc Cluster"""
@@ -226,7 +226,7 @@ class DataProcCluster:
 
 
 class SparkSubmitter:
-    def __init__(self, api_base_url: str, session_timeout: int = 60 * 60) -> None:
+    def __init__(self, session_timeout: int = 60 * 60) -> None:
         """Sends request to Fast API upon Hadoop Cluster to submit Spark jobs. \n
         Each Class method should contains different Spark job
 
@@ -234,8 +234,8 @@ class SparkSubmitter:
             api_base_url (str): Fast API base URL on Cluster side
             session_timeout (int, optional): `requests` module standard session timeout
         """
-        self.api_base_url = api_base_url
         self.session_timeout = session_timeout
+        self.api_base_url = getenv("FAST_API_BASE_URL")
 
     def submit_tags_job(self, holder: TagsJobArgsHolder) -> None:
         """Send request to API to submit tags job
