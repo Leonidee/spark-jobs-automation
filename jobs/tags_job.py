@@ -5,9 +5,8 @@ from pyspark.sql.utils import CapturedException
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-
-from src.jobs import SparkRunner
 from src.logger import SparkLogger
+from src.runner import SparkRunner
 from src.utils import TagsJobArgsHolder
 
 logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))

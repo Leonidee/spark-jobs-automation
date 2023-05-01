@@ -1,9 +1,6 @@
-import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-
-import requests
 
 # airflow
 from airflow.decorators import dag, task
@@ -12,20 +9,11 @@ from airflow.operators.empty import EmptyOperator
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
+from src.cluster import DataProcCluster
 from src.config import Config
-from src.main import DataProcCluster, SparkSubmitter, YandexCloudAPI
-from src.utils import TagsJobArgsHolder, load_environment
-
-load_environment()
-
-YC_DATAPROC_CLUSTER_ID = os.getenv("YC_DATAPROC_CLUSTER_ID")
-YC_DATAPROC_BASE_URL = os.getenv("YC_DATAPROC_BASE_URL")
-YC_OAUTH_TOKEN = os.getenv("YC_OAUTH_TOKEN")
-
-FAST_API_BASE_URL = os.getenv("FAST_API_BASE_URL")
-
-TG_CHAT_ID = os.getenv("TG_CHAT_ID")
-TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN")
+from src.notifyer import TelegramNotifyer
+from src.submiter import SparkSubmitter
+from src.utils import TagsJobArgsHolder
 
 config = Config()
 
@@ -39,21 +27,19 @@ tags_job_args = TagsJobArgsHolder(
 )
 
 
-IAM_TOKEN = YandexCloudAPI().get_iam_token(oauth_token=YC_OAUTH_TOKEN)
+notifyer = TelegramNotifyer()
 
 cluster = DataProcCluster(
-    token=IAM_TOKEN,
-    cluster_id=YC_DATAPROC_CLUSTER_ID,
-    base_url=YC_DATAPROC_BASE_URL,
     max_attempts_to_check_status=20,
 )
-spark = SparkSubmitter(api_base_url=FAST_API_BASE_URL)
+spark = SparkSubmitter()
 
 
 @task(
     default_args={
         "retries": 3,
-        "retry_delay": timedelta(seconds=30),
+        "retry_delay": timedelta(seconds=45),
+        "on_failure_callback": notifyer.notify_on_task_failure,
     },
 )
 def start_cluster() -> None:
@@ -65,6 +51,7 @@ def start_cluster() -> None:
     default_args={
         "retries": 3,
         "retry_delay": timedelta(minutes=2),
+        "on_failure_callback": notifyer.notify_on_task_failure,
     },
 )
 def wait_until_cluster_running() -> None:
@@ -76,6 +63,7 @@ def wait_until_cluster_running() -> None:
     default_args={
         "retries": 3,
         "retry_delay": timedelta(seconds=45),
+        "on_failure_callback": notifyer.notify_on_task_failure,
     }
 )
 def submit_tags_job_for_7d() -> None:
@@ -88,6 +76,7 @@ def submit_tags_job_for_7d() -> None:
     default_args={
         "retries": 3,
         "retry_delay": timedelta(seconds=45),
+        "on_failure_callback": notifyer.notify_on_task_failure,
     }
 )
 def submit_tags_job_for_60d() -> None:
@@ -102,6 +91,7 @@ def submit_tags_job_for_60d() -> None:
     default_args={
         "retries": 3,
         "retry_delay": timedelta(seconds=30),
+        "on_failure_callback": notifyer.notify_on_task_failure,
     },
     trigger_rule="all_success",
 )
@@ -114,6 +104,7 @@ def stop_cluster_success_way() -> None:
     default_args={
         "retries": 3,
         "retry_delay": timedelta(seconds=30),
+        "on_failure_callback": notifyer.notify_on_task_failure,
     },
     trigger_rule="one_failed",
 )
@@ -126,6 +117,7 @@ def stop_cluster_failed_way() -> None:
     default_args={
         "retries": 3,
         "retry_delay": timedelta(minutes=2),
+        "on_failure_callback": notifyer.notify_on_task_failure,
     },
     trigger_rule="all_done",
 )

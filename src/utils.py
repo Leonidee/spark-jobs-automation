@@ -30,7 +30,7 @@ class TagsJobArgsHolder(BaseModel):
     tgt_path: str
 
 
-def load_environment(dotenv_file_name: str = ".env") -> bool:
+def load_environment(dotenv_file_name: str = ".env") -> None:
     """Find .env file and load environment variables from it\n
     Will override system environment variables
 
@@ -42,23 +42,19 @@ def load_environment(dotenv_file_name: str = ".env") -> bool:
     """
     from dotenv import find_dotenv, load_dotenv
 
-    logger.info("Loading .env file")
-    is_loaded = False
+    logger.info("Loading environment variables")
+
+    logger.debug("Trying to find .env file in project folder")
     try:
-        load_dotenv(
-            dotenv_path=find_dotenv(
-                filename=dotenv_file_name, raise_error_if_not_found=True
-            ),
-            verbose=True,
-            override=True,
-        )
-        is_loaded = True
-        logger.info("Done")
+        path = find_dotenv(filename=dotenv_file_name, raise_error_if_not_found=True)
+        logger.debug("File found")
     except IOError:
         logger.error(".env file not found!")
         sys.exit(1)
 
-    return is_loaded
+    logger.debug("Loading .env file variables")
+    load_dotenv(dotenv_path=path, verbose=True, override=True)
+    logger.debug("Done")
 
 
 class SparkArgsValidator:
@@ -91,4 +87,4 @@ class SparkArgsValidator:
         if int(holder.threshold) > 5_000:
             raise AssertionError("`threshold` must be lower that 5_000")
 
-        logger.info("Validation passed!")
+        logger.info("Validation passed")
