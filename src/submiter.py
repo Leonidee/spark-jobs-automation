@@ -65,11 +65,11 @@ class SparkSubmitter:
                 logger.info(
                     f"Spark Job was executed successfully! Results -> `{holder.tgt_path}`"
                 )
-                logger.info(f"Job stdout:\n{response.get('stdout')}")
-                logger.info(f"Job stderr:\n{response.get('stderr')}")
+                logger.info(f"Job stdout:\n\n{response.get('stdout')}")
+                logger.info(f"Job stderr:\n\n{response.get('stderr')}")
 
             else:
                 logger.error("Unable to submit spark job! API returned non-zero code")
-                logger.error(f"Job stdout:\n{response.get('stdout')}")
-                logger.error(f"Job stderr:\n{response.get('stderr')}")
+                logger.error(f"Job stdout:\n\n{response.get('stdout')}")
+                logger.error(f"Job stderr:\n\n{response.get('stderr')}")
                 sys.exit(1)
