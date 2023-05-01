@@ -1,6 +1,6 @@
 # About
 
-![data-pipeline](https://github.com/Leonidee/spark-jobs-automation/blob/master/images/pipeline-3.png?raw=true)
+![pipeline-3](https://github.com/Leonidee/spark-jobs-automation/blob/testing/images/pipeline-3.png?raw=true)
 
 The goal of this project is to implement an approach for ad-hoc scheduling of Spark jobs, with minimal infrastructure deployment costs.
 
