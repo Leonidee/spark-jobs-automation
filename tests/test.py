@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config
 from src.logger import SparkLogger
-from src.main import SparkSubmitter
+from src.submiter import SparkSubmitter
 from src.utils import TagsJobArgsHolder, load_environment
 
 config = Config()
@@ -25,16 +25,13 @@ FAST_API_BASE_URL = os.getenv("FAST_API_BASE_URL")
 
 
 if __name__ == "__main__":
-    # spark = SparkSubmitter(api_base_url=FAST_API_BASE_URL)
-    # holder = TagsJobArgsHolder(
-    #     date=SPARK_REPORT_DATE,
-    #     depth=2,
-    #     threshold=20,
-    #     tags_verified_path=TAGS_VERIFIED_PATH,
-    #     src_path=SRC_PATH,
-    #     tgt_path=TGT_PATH,
-    # )
-    # spark.submit_tags_job(holder=holder)
-    d = dict(a="horay!", b="hello")
-
-    print(d.get("cf", "oh nooo 🥹"))
+    spark = SparkSubmitter()
+    holder = TagsJobArgsHolder(
+        date=SPARK_REPORT_DATE,
+        depth=2,
+        threshold=20,
+        tags_verified_path=TAGS_VERIFIED_PATH,
+        src_path=SRC_PATH,
+        tgt_path=TGT_PATH,
+    )
+    spark.submit_tags_job(holder=holder)

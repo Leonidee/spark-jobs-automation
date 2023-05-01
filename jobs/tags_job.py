@@ -32,15 +32,15 @@ def main() -> None:
 
     try:
         spark = SparkRunner()
-        spark.do_tags_job(
+        spark.run_tags_job(
             holder=holder,
         )
     except CapturedException as e:
         logger.exception(e)
+        sys.exit(1)
 
     finally:
         spark.stop_session()
-        sys.exit(1)
 
 
 if __name__ == "__main__":

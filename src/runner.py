@@ -129,14 +129,14 @@ class SparkRunner:
         self.spark.stop()
         self.logger.info("Session stopped")
 
-    def do_tags_job(
+    def run_tags_job(
         self,
         holder: TagsJobArgsHolder,
     ) -> None:
-        """Submit `tags-job`
+        """Run `tags-job`
 
         Args:
-            holder (TagsJobArgsHolder): Object with Spark Job arguments
+            holder (TagsJobArgsHolder): `TagsJobArgsHolder` with Spark Job arguments
         """
         try:
             self.validator.validate_tags_job_args(holder=holder)
