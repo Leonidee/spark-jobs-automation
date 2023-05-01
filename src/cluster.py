@@ -4,7 +4,7 @@ from os import getenv
 from pathlib import Path
 from time import sleep
 
-from requests import get, post
+import requests
 from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeout
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -18,7 +18,9 @@ load_environment()
 logger = (
     getLogger("aiflow.task")
     if config.IS_PROD
-    else SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
+    else SparkLogger(level=config.log_level).get_logger(
+        logger_name=str(Path(Path(__file__).name))
+    )
 )
 
 
@@ -51,7 +53,7 @@ class DataProcCluster:
 
         try:
             logger.debug("Send request to API")
-            response = post(
+            response = requests.post(
                 url="https://iam.api.cloud.yandex.net/iam/v1/tokens",
                 json={"yandexPassportOauthToken": OAUTH_TOKEN},
                 timeout=60 * 2,
@@ -61,8 +63,6 @@ class DataProcCluster:
             if response.status_code == 200:
                 logger.debug("Response received")
                 response = response.json()
-
-                logger.debug(f"API response: {response}")
 
                 if "iamToken" in response.keys():
                     iam_token = response["iamToken"]
@@ -83,7 +83,7 @@ class DataProcCluster:
 
         try:
             logger.debug("Sending request to API")
-            response = post(
+            response = requests.post(
                 url=f"{self.base_url}/{self.cluster_id}:start",
                 headers={"Authorization": f"Bearer {self.token}"},
                 timeout=60 * 2,
@@ -103,7 +103,7 @@ class DataProcCluster:
         logger.info("Stopping Cluster")
         try:
             logger.debug("Sending request to API")
-            response = post(
+            response = requests.post(
                 url=f"{self.base_url}/{self.cluster_id}:stop",
                 headers={"Authorization": f"Bearer {self.token}"},
             )
@@ -130,7 +130,7 @@ class DataProcCluster:
         while not is_active:
             try:
                 logger.debug(f"Send request to API. Attempt: {i}")
-                response = get(
+                response = requests.get(
                     url=f"{self.base_url}/{self.cluster_id}",
                     headers={"Authorization": f"Bearer {self.token}"},
                 )
@@ -151,12 +151,13 @@ class DataProcCluster:
                     logger.info("Cluster is ready!")
                     is_active = True
 
-            if i == self.max_attempts_to_check_status:
-                logger.error(
-                    "No more attemts left to check Cluster status! Cluster status is unknown."
-                )
-                sys.exit(1)
-            else:
+            if not is_active:
+                if i == self.max_attempts_to_check_status:
+                    logger.error(
+                        "No more attemts left to check Cluster status! Cluster status is unknown."
+                    )
+                    sys.exit(1)
+
                 sleep(20)
                 logger.debug("Another attempt to check status")
                 i += 1
@@ -175,7 +176,7 @@ class DataProcCluster:
         while not is_stopped:
             try:
                 logger.debug(f"Send request to API. Attempt: {i}")
-                response = get(
+                response = requests.get(
                     url=f"{self.base_url}/{self.cluster_id}",
                     headers={"Authorization": f"Bearer {self.token}"},
                 )
@@ -197,12 +198,13 @@ class DataProcCluster:
 
                     is_stopped = True
 
-            if i == self.max_attempts_to_check_status:
-                logger.error(
-                    "No more attemts left to check Cluster status! Cluster status is unknown."
-                )
-                sys.exit(1)
-            else:
+            if not is_stopped:
+                if i == self.max_attempts_to_check_status:
+                    logger.error(
+                        "No more attemts left to check Cluster status! Cluster status is unknown."
+                    )
+                    sys.exit(1)
+
                 sleep(20)
                 logger.debug("Another attempt to check status")
                 i += 1

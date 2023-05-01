@@ -12,20 +12,19 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.cluster import DataProcCluster
 from src.config import Config
 from src.notifyer import TelegramNotifyer
-from src.submiter import SparkSubmitter
+from src.submitter import SparkSubmitter
 from src.utils import TagsJobArgsHolder
 
 config = Config()
 
 tags_job_args = TagsJobArgsHolder(
-    date="2022-03-24",
+    date=str(datetime.today().date()),
     depth=7,
     threshold=50,
     tags_verified_path=config.tags_job_config["TAGS_VERIFIED_PATH"],
     src_path=config.tags_job_config["SRC_PATH"],
     tgt_path=config.tags_job_config["TGT_PATH"],
 )
-
 
 notifyer = TelegramNotifyer()
 

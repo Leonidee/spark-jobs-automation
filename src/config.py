@@ -29,3 +29,7 @@ class Config:
     @property
     def tags_job_config(self) -> dict:
         return self.config["spark"]["tags-job"]
+
+    @property
+    def log_level(self) -> str:
+        return self.config["logging"]["level"]

@@ -17,7 +17,9 @@ load_environment()
 logger = (
     getLogger("aiflow.task")
     if config.IS_PROD
-    else SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
+    else SparkLogger(level=config.log_level).get_logger(
+        logger_name=str(Path(Path(__file__).name))
+    )
 )
 
 
@@ -38,12 +40,12 @@ class SparkSubmitter:
         Args:
             holder (TagsJobArgsHolder): Argument for submiting tags job inside `TagsJobArgsHolder` object
         """
+        logger.info("Submiting `tags` job")
 
-        logger.info("Requesting API to submit `tags` job.")
-
-        logger.info(f"Spark job args:\n{holder}")
+        logger.debug(f"Spark job args:\n{holder}")
 
         try:
+            logger.debug("Send request to API")
             logger.info("Processing...")
             response = post(
                 url=f"{self.api_base_url}/submit_tags_job",
@@ -57,19 +59,20 @@ class SparkSubmitter:
             sys.exit(1)
 
         if response.status_code == 200:
-            logger.info("Response received!")
+            logger.debug("Response received")
 
             response = response.json()
+            logger.debug(f"API response: {response}")
 
             if response.get("returncode") == 0:
                 logger.info(
                     f"Spark Job was executed successfully! Results -> `{holder.tgt_path}`"
                 )
-                logger.info(f"Job stdout:\n\n{response.get('stdout')}")
-                logger.info(f"Job stderr:\n\n{response.get('stderr')}")
+                logger.debug(f"Job stdout:\n\n{response.get('stdout')}")
+                logger.debug(f"Job stderr:\n\n{response.get('stderr')}")
 
             else:
                 logger.error("Unable to submit spark job! API returned non-zero code")
-                logger.error(f"Job stdout:\n\n{response.get('stdout')}")
-                logger.error(f"Job stderr:\n\n{response.get('stderr')}")
+                logger.debug(f"Job stdout:\n\n{response.get('stdout')}")
+                logger.debug(f"Job stderr:\n\n{response.get('stderr')}")
                 sys.exit(1)

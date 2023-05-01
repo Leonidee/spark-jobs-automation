@@ -31,6 +31,8 @@ from pyspark.sql.functions import (
     trim,
 )
 
+load_environment()
+
 
 class SparkRunner:
     def __init__(self) -> None:
@@ -44,8 +46,6 @@ class SparkRunner:
         "Get boto3 S3 connection instance"
 
         self.logger.info("Getting s3 connection instace")
-
-        load_environment()
 
         s3 = boto3.session.Session().client(
             service_name="s3",
