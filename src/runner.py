@@ -60,7 +60,7 @@ class SparkRunner:
         self,
         event_type: Literal["message", "reaction", "subscription"],
         holder: Any,
-    ) -> deque[str]:
+    ) -> deque:
         """Get S3 paths contains dataset partitions
 
         Collects paths corresponding to the passed in `holder` object arguments and checks if each path exists on S3. Collects only existing paths.
