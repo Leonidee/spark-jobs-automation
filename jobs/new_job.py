@@ -9,8 +9,6 @@ import boto3
 import findspark
 from botocore.exceptions import ClientError
 
-from src.logger import SparkLogger
-from src.utils import SparkArgsValidator, TagsJobArgsHolder, load_environment
 
 os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
 os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
@@ -30,11 +28,20 @@ from pyspark.sql.functions import (
     split,
     to_timestamp,
     trim,
+    count,
+    desc,
 )
+
+
+sys.path.append(str(Path(__file__).parent.parent))
+from src.logger import SparkLogger
+from src.utils import load_environment
 
 load_environment()
 
-logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
+logger = SparkLogger(level="DEBUG").get_logger(
+    logger_name=str(Path(Path(__file__).name))
+)
 
 
 class ArgsHolder(BaseModel):
@@ -46,7 +53,7 @@ class ArgsHolder(BaseModel):
 class SparkRunner:
     def __init__(self) -> None:
         """Main data processor class"""
-        self.logger = SparkLogger().get_logger(
+        self.logger = SparkLogger(level="DEBUG").get_logger(
             logger_name=str(Path(Path(__file__).name))
         )
 
@@ -142,27 +149,33 @@ class SparkRunner:
 
         self._init_session(app_name="new-app")
 
+        df = self.spark.read.parquet(*src_paths, compression="gzip")
+
+        # df = (
+        #     df.where(df.message_channel_to.isNotNull())
+        #     .withColumn("tag", explode(df.tags))
+        #     .select(col("message_from"), col("tag"), col("message_id"))
+        # )
+
+        # df.groupBy(col("message_from"), col("tag")).agg(
+        #     count(col("message_id")).alias("suggested_count")
+        # ).orderBy(df.message_from, desc(col("suggested_count"))).show(100)
+
+        df.repartition(1).write.parquet(
+            "s3a://data-ice-lake-04/messager-data/analytics/tmp/wide-dataframe",
+            mode="overwrite",
+        )
+
 
 def main() -> None:
-    try:
-        if len(sys.argv) > 4:
-            raise KeyError
-
-        holder = ArgsHolder(
-            date=sys.argv[1],
-            depth=int(sys.argv[2]),
-            src_path=sys.argv[3],
-        )
-
-    except (IndexError, KeyError) as e:
-        logger.exception(e)
-        sys.exit(1)
-
+    holder = ArgsHolder(
+        date="2022-06-04",
+        depth=50,
+        src_path="s3a://data-ice-lake-04/messager-data/analytics/cleaned-events",
+    )
     try:
         spark = SparkRunner()
-        spark.run_new_job(
-            holder=holder,
-        )
+        spark.run_new_job(holder=holder)
     except CapturedException as e:
         logger.exception(e)
         sys.exit(1)
