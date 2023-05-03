@@ -19,8 +19,11 @@ os.environ["PYTHONPATH"] = "/opt/conda/bin/python3"
 findspark.init()
 findspark.find()
 
-from pyspark.sql import SparkSession
-from pyspark.sql.utils import CapturedException
+from pyspark.sql import SparkSession, Window
+from pyspark.sql.utils import (
+    CapturedException,
+    AnalysisException,
+)  # todo add this exeptions to first tags job
 from pyspark.sql.functions import (
     col,
     count_distinct,
@@ -30,16 +33,25 @@ from pyspark.sql.functions import (
     trim,
     count,
     desc,
+    asc,
+    rank,
+    row_number,
+    when,
+    regexp_replace,
+    first,
 )
 
-
+# package
 sys.path.append(str(Path(__file__).parent.parent))
 from src.logger import SparkLogger
 from src.utils import load_environment
+from src.config import Config
 
 load_environment()
 
-logger = SparkLogger(level="DEBUG").get_logger(
+config = Config()
+
+logger = SparkLogger(level=config.log_level).get_logger(
     logger_name=str(Path(Path(__file__).name))
 )
 
@@ -53,7 +65,7 @@ class ArgsHolder(BaseModel):
 class SparkRunner:
     def __init__(self) -> None:
         """Main data processor class"""
-        self.logger = SparkLogger(level="DEBUG").get_logger(
+        self.logger = SparkLogger(level=config.log_level).get_logger(
             logger_name=str(Path(Path(__file__).name))
         )
 
@@ -151,32 +163,175 @@ class SparkRunner:
 
         df = self.spark.read.parquet(*src_paths, compression="gzip")
 
-        # df = (
-        #     df.where(df.message_channel_to.isNotNull())
-        #     .withColumn("tag", explode(df.tags))
-        #     .select(col("message_from"), col("tag"), col("message_id"))
-        # )
+        df = (
+            df.where(df.message_channel_to.isNotNull())
+            .withColumn("tag", explode(df.tags))
+            .select(col("message_from").alias("user_id"), col("tag"), col("message_id"))
+        )
 
-        # df.groupBy(col("message_from"), col("tag")).agg(
-        #     count(col("message_id")).alias("suggested_count")
-        # ).orderBy(df.message_from, desc(col("suggested_count"))).show(100)
+        df = df.groupBy(col("user_id"), col("tag")).agg(
+            count(col("message_id")).alias("tag_cnt")
+        )
+
+        w = (
+            Window()
+            .partitionBy(["user_id"])
+            .orderBy(col("user_id").asc(), col("tag_cnt").desc(), col("tag").desc())
+        )
+
+        df = df.withColumn("tag_rank", row_number().over(w)).select("*")
+
+        df = df.where(col("tag_rank") <= 3)
+
+        df = df.withColumn(
+            "tag_rank_name",
+            when(df.tag_rank == 1, regexp_replace(df.tag_rank, "1", "tag_top_1"))
+            .when(df.tag_rank == 2, regexp_replace(df.tag_rank, "2", "tag_top_2"))
+            .when(df.tag_rank == 3, regexp_replace(df.tag_rank, "3", "tag_top_3")),
+        )
+
+        df = df.groupBy(col("user_id")).pivot("tag_rank_name").agg(first("tag"))
 
         df.repartition(1).write.parquet(
-            "s3a://data-ice-lake-04/messager-data/analytics/tmp/wide-dataframe",
+            "s3a://data-ice-lake-04/messager-data/analytics/tmp/tag_tops_05_04_1",
             mode="overwrite",
         )
+
+    def run_likes_job(self, holder: ArgsHolder) -> None:
+        src_paths_reaction = self._get_src_paths(event_type="reaction", holder=holder)
+
+        src_paths_message = self._get_src_paths(event_type="message", holder=holder)
+
+        self._init_session(app_name="new-app")
+
+        reactions_df = self.spark.read.parquet(*src_paths_reaction, compression="gzip")
+        messages_df = self.spark.read.parquet(*src_paths_message, compression="gzip")
+
+        reactions_df = reactions_df.where(reactions_df.message_id.isNotNull()).select(
+            col("reaction_from").alias("user_id"),
+            col("reaction_type"),
+            col("message_id"),
+        )
+        self.logger.debug("Reactions dataframe is below")
+
+        reactions_df.show(100)
+
+        self.logger.debug("Messages dataframe is below")
+
+        messages_df = (
+            messages_df.where(messages_df.message_channel_to.isNotNull())
+            .withColumn("tag", explode(messages_df.tags))
+            .select(col("message_id"), col("tag"))
+        )
+
+        messages_df.show(100)
+
+        self.logger.debug("Joined dataframe is below")
+
+        df = messages_df.join(other=reactions_df, on=["message_id"], how="inner")
+        df.show(100)
+
+        self.logger.debug("Likes dataframe is below")
+
+        likes_df = (
+            df.where(df.reaction_type == "like")
+            .groupBy(df.user_id, df.tag)
+            .agg(count("message_id").alias("likes_cnt"))
+        )
+        likes_df.show(100)
+
+        w = (
+            Window()
+            .partitionBy(["user_id"])
+            .orderBy(col("user_id").asc(), col("likes_cnt").desc(), col("tag").desc())
+        )
+
+        likes_df = (
+            likes_df.withColumn("tag_rank", row_number().over(w))
+            .select("*")
+            .where(col("tag_rank") <= 3)
+        )
+
+        likes_df = likes_df.withColumn(
+            "tag_rank_name",
+            when(
+                likes_df.tag_rank == 1,
+                regexp_replace(likes_df.tag_rank, "1", "like_tag_top_1"),
+            )
+            .when(
+                likes_df.tag_rank == 2,
+                regexp_replace(likes_df.tag_rank, "2", "like_tag_top_2"),
+            )
+            .when(
+                likes_df.tag_rank == 3,
+                regexp_replace(likes_df.tag_rank, "3", "like_tag_top_3"),
+            ),
+        )
+
+        likes_df = (
+            likes_df.groupBy(col("user_id")).pivot("tag_rank_name").agg(first("tag"))
+        )
+
+        logger.debug("`likes` dataframe results below")
+        likes_df.show(100)
+
+        dislikes_df = (
+            df.where(df.reaction_type == "dislike")
+            .groupBy(df.user_id, df.tag)
+            .agg(count("message_id").alias("dislikes_cnt"))
+        )
+        w = (
+            Window()
+            .partitionBy(["user_id"])
+            .orderBy(
+                col("user_id").asc(), col("dislikes_cnt").desc(), col("tag").desc()
+            )
+        )
+
+        dislikes_df = (
+            dislikes_df.withColumn("tag_rank", row_number().over(w))
+            .select("*")
+            .where(col("tag_rank") <= 3)
+        )
+        dislikes_df = dislikes_df.withColumn(
+            "tag_rank_name",
+            when(
+                dislikes_df.tag_rank == 1,
+                regexp_replace(dislikes_df.tag_rank, "1", "dislike_tag_top_1"),
+            )
+            .when(
+                dislikes_df.tag_rank == 2,
+                regexp_replace(dislikes_df.tag_rank, "2", "dislike_tag_top_2"),
+            )
+            .when(
+                dislikes_df.tag_rank == 3,
+                regexp_replace(dislikes_df.tag_rank, "3", "dislike_tag_top_3"),
+            ),
+        )
+
+        logger.debug("`dislikes` dataframe results below")
+        dislikes_df = (
+            dislikes_df.groupBy(col("user_id")).pivot("tag_rank_name").agg(first("tag"))
+        )
+        dislikes_df.show(100)
+
+        result_df = likes_df.join(dislikes_df, how="inner", on="user_id")
+
+        logger.debug("Resulting dataframe below")
+        result_df.show(100)
 
 
 def main() -> None:
     holder = ArgsHolder(
-        date="2022-06-04",
-        depth=50,
+        date="2022-05-04",
+        depth=10,
         src_path="s3a://data-ice-lake-04/messager-data/analytics/cleaned-events",
     )
     try:
         spark = SparkRunner()
-        spark.run_new_job(holder=holder)
-    except CapturedException as e:
+        # spark.run_new_job(holder=holder)
+        spark.run_likes_job(holder=holder)
+    except (CapturedException, AnalysisException) as e:
         logger.exception(e)
         sys.exit(1)
 
