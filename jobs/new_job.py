@@ -139,16 +139,25 @@ class SparkRunner:
 
         return existing_paths
 
-    def _init_session(self, app_name: str) -> None:
+    def _init_session(
+        self,
+        app_name: str,
+        log4j_level: Literal[
+            "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
+        ] = "WARN",
+    ) -> None:
         """Configure and initialize Spark Session
 
         Args:
             app_name (str): Name of Spark Application
+            log4j_level (str): Spark Context logging level. Defaults to `WARN`
         """
         self.logger.info("Initializing Spark Session")
 
         self.spark = SparkSession.builder.master("yarn").appName(app_name).getOrCreate()
-        self.spark.sparkContext.setLogLevel("WARN")
+        self.spark.sparkContext.setLogLevel(log4j_level)
+
+        self.logger.info(f"Log4j level set to {log4j_level}")
 
     def stop_session(self) -> None:
         """Stop active Spark Session"""
@@ -156,75 +165,70 @@ class SparkRunner:
         self.spark.stop()
         self.logger.info("Session stopped")
 
-    def run_new_tags_job(self, holder: ArgsHolder) -> None:
-        src_paths = self._get_src_paths(event_type="message", holder=holder)
+    def calculate_user_interests(self, holder: ArgsHolder) -> None:
+        self.logger.info("Executing `calculate_user_interests` job")
 
         self._init_session(app_name="new-app")
 
-        df = self.spark.read.parquet(*src_paths, compression="gzip")
-
-        df = (
-            df.where(df.message_channel_to.isNotNull())
-            .withColumn("tag", explode(df.tags))
-            .select(col("message_from").alias("user_id"), col("tag"), col("message_id"))
-        )
-
-        df = df.groupBy(col("user_id"), col("tag")).agg(
-            count(col("message_id")).alias("tag_cnt")
-        )
-
+        # this window used for all dataframes
         w = (
             Window()
             .partitionBy(["user_id"])
-            .orderBy(col("user_id").asc(), col("tag_cnt").desc(), col("tag").desc())
+            .orderBy(col("user_id").asc(), col("cnt").desc(), col("tag").desc())
         )
 
-        df = df.withColumn("tag_rank", row_number().over(w)).select("*")
+        # top_tags dataframe operations
+        self.logger.debug("Reading data for `top_tags` frame")
+        top_tags_src_paths = self._get_src_paths(event_type="message", holder=holder)
+        top_tags_df = self.spark.read.parquet(*top_tags_src_paths, compression="gzip")
+        self.logger.debug(f"Done with {top_tags_df.count()} rows")
 
-        df = df.where(col("tag_rank") <= 3)
-
-        df = df.withColumn(
-            "tag_rank_name",
-            when(df.tag_rank == 1, regexp_replace(df.tag_rank, "1", "tag_top_1"))
-            .when(df.tag_rank == 2, regexp_replace(df.tag_rank, "2", "tag_top_2"))
-            .when(df.tag_rank == 3, regexp_replace(df.tag_rank, "3", "tag_top_3")),
+        self.logger.debug("Preparing")
+        top_tags_df = (
+            top_tags_df.where(top_tags_df.message_channel_to.isNotNull())
+            .withColumn("tag", explode(top_tags_df.tags))
+            .select(col("message_from").alias("user_id"), col("tag"), col("message_id"))
         )
 
-        df = df.groupBy(col("user_id")).pivot("tag_rank_name").agg(first("tag"))
-
-        df.repartition(1).write.parquet(
-            "s3a://data-ice-lake-04/messager-data/analytics/tmp/tag_tops_05_04_1",
-            mode="overwrite",
+        self.logger.debug("Collecting `top_tags` frame")
+        top_tags_df = (
+            top_tags_df.groupBy(col("user_id"), col("tag"))
+            .agg(count(col("message_id")).alias("cnt"))
+            .withColumn("tag_rank", row_number().over(w))
+            .where(col("tag_rank") <= 3)
+            .groupBy(col("user_id"))
+            .pivot("tag_rank", [1, 2, 3])
+            .agg(first("tag"))
+            .withColumnRenamed("1", "tag_top_1")
+            .withColumnRenamed("2", "tag_top_2")
+            .withColumnRenamed("3", "tag_top_3")
         )
+        self.logger.debug(f"Done with {top_tags_df.count()} rows")
 
-    def run_likes_job(self, holder: ArgsHolder) -> None:
-        self.logger.info("Executing likes job")
-        src_paths_reaction = self._get_src_paths(event_type="reaction", holder=holder)
-
-        self._init_session(app_name="new-app")
-
-        self.logger.debug("Reading `reactions` dataframe")
-        reactions_df = self.spark.read.parquet(*src_paths_reaction, compression="gzip")
+        # reactions dataframe operations
+        self.logger.debug("Reading data for `reactions` frame")
+        reaction_src_paths = self._get_src_paths(event_type="reaction", holder=holder)
+        reactions_df = self.spark.read.parquet(*reaction_src_paths, compression="gzip")
         self.logger.debug(f"Done with {reactions_df.count()} rows")
 
-        self.logger.debug("Reading `messages` dataframe")
-        messages_df = self.spark.read.parquet(
+        self.logger.debug("Reading  data for `all_messages` frame")
+        all_messages_df = self.spark.read.parquet(
             "s3a://data-ice-lake-04/messager-data/analytics/cleaned-events/event_type=message",
             compression="gzip",
         )
-        self.logger.debug(f"Done with {messages_df.count()} rows")
+        self.logger.debug(f"Done with {all_messages_df.count()} rows")
 
-        self.logger.debug("Preparing messages frame")
-        messages_df = (
-            messages_df.where(messages_df.message_channel_to.isNotNull())
-            .withColumn("tag", explode(messages_df.tags))
+        self.logger.debug("Preparing `all_messages` frame")
+        all_messages_df = (
+            all_messages_df.where(all_messages_df.message_channel_to.isNotNull())
+            .withColumn("tag", explode(all_messages_df.tags))
             .select(col("message_id"), col("tag"))
         )
 
-        self.logger.debug("Joining frames")
+        self.logger.debug("Joining `reactions` and `all_messages` frames")
         df = (
             reactions_df.where(reactions_df.message_id.isNotNull())
-            .join(other=messages_df, on="message_id", how="inner")
+            .join(other=all_messages_df, on="message_id", how="inner")
             .select(
                 col("reaction_from").alias("user_id"),
                 col("reaction_type"),
@@ -232,13 +236,7 @@ class SparkRunner:
                 col("tag"),
             )
         )
-        # df.show(100)
-
-        w = (
-            Window()
-            .partitionBy(["user_id"])
-            .orderBy(col("user_id").asc(), col("cnt").desc(), col("tag").desc())
-        )
+        self.logger.debug(f"Done with {df.count()} rows")
 
         self.logger.debug("Collecting `likes` frame")
 
@@ -258,7 +256,6 @@ class SparkRunner:
             .withColumnRenamed("2", "like_tag_top_2")
             .withColumnRenamed("3", "like_tag_top_3")
         )
-        # likes_df.show(100)
 
         self.logger.debug(f"Done with {likes_df.count()} rows")
 
@@ -282,33 +279,32 @@ class SparkRunner:
         )
 
         self.logger.debug(f"Done with {dislikes_df.count()} rows")
-        # dislikes_df.show(100)
 
-        self.logger.debug("Collecting resuling frame")
+        # resulting frame operations
+        self.logger.debug("Joining all frames")
 
-        result_df = likes_df.join(dislikes_df, how="outer", on="user_id")
-
+        result_df = top_tags_df.join(likes_df, how="outer", on="user_id").join(
+            dislikes_df, how="outer", on="user_id"
+        )
         self.logger.debug(f"Done with {result_df.count()} rows")
 
-        result_df.show(100)
-
-        # self.logger.debug("Writing parquet on S3")
-
-        # result_df.repartition(1).write.parquet(
-        #     "s3a://data-ice-lake-04/messager-data/analytics/tmp/reaction_tag_tops_04_04_1",
-        #     mode="overwrite",
-        # )
+        self.logger.info("Writing results on S3")
+        result_df.repartition(1).write.parquet(
+            f"s3a://data-ice-lake-04/messager-data/analytics/tmp/user_interests_d{holder.depth}",
+            mode="overwrite",
+        )
+        self.logger.info(f"Done")
 
 
 def main() -> None:
     holder = ArgsHolder(
-        date="2022-04-04",
-        depth=1,
+        date="2022-05-25",
+        depth=28,
         src_path="s3a://data-ice-lake-04/messager-data/analytics/cleaned-events",
     )
     try:
         spark = SparkRunner()
-        spark.run_likes_job(holder=holder)
+        spark.calculate_user_interests(holder=holder)
     except (CapturedException, AnalysisException) as e:
         logger.exception(e)
         sys.exit(1)
