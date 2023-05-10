@@ -2,7 +2,7 @@ import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal, List
+from typing import Any, Literal, List, Union
 from pandas import read_csv
 
 from pydantic import BaseModel
@@ -34,6 +34,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark import StorageLevel
+import pyspark
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
@@ -142,7 +143,45 @@ class SparkRunner:
 
         return sdf
 
-    def compute_messages_city(self, holder: ArgsHolder) -> DataFrame:
+    def _get_event_city(
+        self, sdf: pyspark.sql.DataFrame, patition_by: Union[str, List[str]]
+    ) -> pyspark.sql.DataFrame:
+        cities_coords_sdf = self._get_coordinates_dataframe()
+
+        sdf = (
+            sdf.crossJoin(cities_coords_sdf)
+            .withColumn("dlat", f.radians(f.col("lat")) - f.radians(f.col("city_lat")))
+            .withColumn("dlon", f.radians(f.col("lon")) - f.radians(f.col("city_lon")))
+            .withColumn(
+                "distance_a",
+                f.sin(f.col("dlat") / 2) ** 2
+                + f.cos(f.radians(f.col("city_lat")))
+                * f.cos(f.radians(f.col("lat")))
+                * f.sin(f.col("dlon") / 2) ** 2,
+            )
+            .withColumn("distance_b", f.asin(f.sqrt(f.col("distance_a"))))
+            .withColumn("distance", 2 * 6371 * f.col("distance_b"))
+            .withColumn(
+                "city_dist_rnk",
+                f.row_number().over(
+                    Window().partitionBy(patition_by).orderBy(f.asc("distance"))
+                ),
+            )
+            .where(f.col("city_dist_rnk") == 1)
+            .drop(
+                "city_lat",
+                "city_lon",
+                "dlat",
+                "dlon",
+                "distance_a",
+                "distance_b",
+                "distance",
+                "city_dist_rnk",
+            )
+        )
+        return sdf
+
+    def compute_step_one(self, holder: ArgsHolder):
         self.logger.debug("Computing city to each message")
 
         self.logger.debug("Getting input data")
@@ -156,7 +195,7 @@ class SparkRunner:
 
         self.logger.debug("Preparing dataframe")
 
-        messages_sdf = (
+        sdf = (
             events_sdf.where(events_sdf.event.message_from.isNotNull())
             .select(
                 events_sdf.event.message_from.alias("user_id"),
@@ -176,8 +215,8 @@ class SparkRunner:
         self.logger.debug("Getting main messages dataframe")
         self.logger.debug("Processing...")
 
-        messages_sdf = (
-            messages_sdf.crossJoin(cities_coords_sdf)
+        sdf = (
+            sdf.crossJoin(cities_coords_sdf)
             .withColumn(
                 "dlat", f.radians(f.col("msg_lat")) - f.radians(f.col("city_lat"))
             )
@@ -208,68 +247,95 @@ class SparkRunner:
             )
         )
 
-        self.logger.debug("Persisting results")
-
-        messages_sdf.repartition(1).write.parquet(
-            "s3a://data-ice-lake-04/messager-data/tmp/messages_sdf_1", mode="overwrite"
-        )
-
-    def compute_act_and_home_city(self):
-        self.logger.debug("Collecting act_city")
-
-        messages_sdf = self.spark.read.parquet(
-            "s3a://data-ice-lake-04/messager-data/tmp/messages_sdf_1"
-        )
-
-        # * travel_array and travel_count
-        # travels = messages_sdf.withColumn(
-        #     "prev_city",
-        #     f.lag("city_name").over(
-        #         Window().partitionBy("user_id").orderBy(f.asc("msg_ts"))
-        #     ),
-        # ).withColumn(
-        #     "visit_flg",
-        #     f.when(
-        #         (f.col("city_name") != f.col("prev_city"))
-        #         | (f.col("prev_city").isNull()),
-        #         f.lit(1),
-        #     ).otherwise(f.lit(0)),
-        # ).where(
-        #     f.col("visit_flg") == 1
-        # ).groupby(
-        #     "user_id"
-        # ).agg(
-        #     f.collect_list("city_name").alias("travel_array")
-        # ).select(
-        #     "user_id", "travel_array", f.size("travel_array").alias("travel_count")
-        # )
-        # todo сгруппировать по дням?
-        messages_sdf.withColumn(
-            "dense_rank",
-            f.dense_rank().over(
-                Window().partitionBy("user_id").orderBy(f.asc("msg_ts"))
+        sdf = sdf.withColumn(
+            "act_city",
+            f.first(col="city_name", ignorenulls=True).over(
+                Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
             ),
-        ).show(100, False)
+        ).withColumn(
+            "local_time",
+            f.from_utc_timestamp(timestamp=f.col("msg_ts"), tz="Australia/Sydney"),
+        )
 
+        travels = (
+            sdf.withColumn(
+                "prev_city",
+                f.lag("city_name").over(
+                    Window().partitionBy("user_id").orderBy(f.asc("msg_ts"))
+                ),
+            )
+            .withColumn(
+                "visit_flg",
+                f.when(
+                    (f.col("city_name") != f.col("prev_city"))
+                    | (f.col("prev_city").isNull()),
+                    f.lit(1),
+                ).otherwise(f.lit(0)),
+            )
+            .where(f.col("visit_flg") == 1)
+            .groupby("user_id")
+            .agg(f.collect_list("city_name").alias("travel_array"))
+            .select(
+                "user_id", "travel_array", f.size("travel_array").alias("travel_count")
+            )
+        )
 
-# * act-city
-#    messages_sdf.withColumn(
-#             "act_city",
-#             f.first("city_name", True).over(
-#                 Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
-#             ),
+        sdf.join(travels, how="left", on="user_id").show(100)  # todo save it
+
+    def compute_step_two(self, holder: ArgsHolder):
+        # src_paths = self._get_src_paths(holder=holder)
+        # events_sdf = self.spark.read.parquet(*src_paths)
+
+        # # todo провемужуточный этап. удалить
+        events_sdf = self.spark.read.parquet(
+            "s3a://data-ice-lake-04/messager-data/tmp/step-two-01",
+        )
+
+        # events_sdf.select(
+        #     events_sdf.event.datetime,
+        #     events_sdf.event.message_channel_to,
+        #     events_sdf.event.message_from,
+        #     events_sdf.event.message_group,
+        #     events_sdf.event.message_id,
+        #     events_sdf.event.message_to,
+        #     events_sdf.event.message_ts,
+        #     events_sdf.event.reaction_from,
+        #     events_sdf.event.reaction_type,
+        #     events_sdf.event.subscription_channel,
+        #     events_sdf.event.subscription_user,
+        #     events_sdf.event.user,
+        #     events_sdf.event_type,
+        #     events_sdf.lat,
+        #     events_sdf.lon,
+        # )
+
+        reaction_sdf = events_sdf.where(events_sdf.event_type == "reaction").select(
+            events_sdf.event.datetime.alias("datetime"),
+            events_sdf.event.message_id.alias("message_id"),
+            events_sdf.event.reaction_from.alias("reaction_from"),
+            events_sdf.event.reaction_type.alias("reaction_type"),
+            events_sdf.event_type,
+            events_sdf.lat,
+            events_sdf.lon,
+        )
+        # reaction_sdf = self._get_event_city(
+        #     sdf=reaction_sdf,
+        #     patition_by=["message_id", "reaction_from", "reaction_type"],
+        # )
+
+        reaction_sdf.where(events_sdf.lat.isNull()).show(100)
 
 
 def main() -> None:
     holder = ArgsHolder(
         date="2022-03-12",
-        depth=7,
+        depth=10,
         src_path="s3a://data-ice-lake-04/messager-data/analytics/geo-events",
     )
     try:
         spark = SparkRunner()
         spark.init_session(app_name="testing-app")
-        spark.compute_act_and_home_city()
+        spark.compute_step_two(holder=holder)
 
     except (CapturedException, AnalysisException) as e:
         logger.exception(e)
