@@ -39,6 +39,7 @@ from pyspark.sql.functions import (
     when,
     regexp_replace,
     first,
+    array,
 )
 
 # package
@@ -181,7 +182,7 @@ class SparkRunner:
         self.logger.debug("Reading data for `top_tags` frame")
         top_tags_src_paths = self._get_src_paths(event_type="message", holder=holder)
         top_tags_df = self.spark.read.parquet(*top_tags_src_paths, compression="gzip")
-        self.logger.debug(f"Done with {top_tags_df.count()} rows")
+        # self.logger.debug(f"Done with {top_tags_df.count()} rows")
 
         self.logger.debug("Preparing")
         top_tags_df = (
@@ -203,20 +204,20 @@ class SparkRunner:
             .withColumnRenamed("2", "tag_top_2")
             .withColumnRenamed("3", "tag_top_3")
         )
-        self.logger.debug(f"Done with {top_tags_df.count()} rows")
+        # self.logger.debug(f"Done with {top_tags_df.count()} rows")
 
         # reactions dataframe operations
         self.logger.debug("Reading data for `reactions` frame")
         reaction_src_paths = self._get_src_paths(event_type="reaction", holder=holder)
         reactions_df = self.spark.read.parquet(*reaction_src_paths, compression="gzip")
-        self.logger.debug(f"Done with {reactions_df.count()} rows")
+        # self.logger.debug(f"Done with {reactions_df.count()} rows")
 
         self.logger.debug("Reading  data for `all_messages` frame")
         all_messages_df = self.spark.read.parquet(
             "s3a://data-ice-lake-04/messager-data/analytics/cleaned-events/event_type=message",
             compression="gzip",
         )
-        self.logger.debug(f"Done with {all_messages_df.count()} rows")
+        # self.logger.debug(f"Done with {all_messages_df.count()} rows")
 
         self.logger.debug("Preparing `all_messages` frame")
         all_messages_df = (
@@ -236,7 +237,7 @@ class SparkRunner:
                 col("tag"),
             )
         )
-        self.logger.debug(f"Done with {df.count()} rows")
+        # self.logger.debug(f"Done with {df.count()} rows")
 
         self.logger.debug("Collecting `likes` frame")
 
@@ -257,7 +258,7 @@ class SparkRunner:
             .withColumnRenamed("3", "like_tag_top_3")
         )
 
-        self.logger.debug(f"Done with {likes_df.count()} rows")
+        # self.logger.debug(f"Done with {likes_df.count()} rows")
 
         self.logger.debug("Collecting `dislikes` frame")
 
@@ -278,7 +279,7 @@ class SparkRunner:
             .withColumnRenamed("3", "dislike_tag_top_3")
         )
 
-        self.logger.debug(f"Done with {dislikes_df.count()} rows")
+        # self.logger.debug(f"Done with {dislikes_df.count()} rows")
 
         # resulting frame operations
         self.logger.debug("Joining all frames")
@@ -286,20 +287,23 @@ class SparkRunner:
         result_df = top_tags_df.join(likes_df, how="outer", on="user_id").join(
             dislikes_df, how="outer", on="user_id"
         )
-        self.logger.debug(f"Done with {result_df.count()} rows")
+        result_df.show(10)
+        # self.logger.debug(f"Done with {result_df.count()} rows")
 
-        self.logger.info("Writing results on S3")
-        result_df.repartition(1).write.parquet(
-            f"s3a://data-ice-lake-04/messager-data/analytics/tmp/user_interests_d{holder.depth}",
-            mode="overwrite",
-        )
-        self.logger.info(f"Done")
+        # result_df.explain(extended=True)
+
+        # self.logger.info("Writing results on S3")
+        # result_df.repartition(1).write.parquet(
+        #     f"s3a://data-ice-lake-04/messager-data/analytics/tmp/user_interests_d{holder.depth}",
+        #     mode="overwrite",
+        # )
+        # self.logger.info(f"Done")
 
 
 def main() -> None:
     holder = ArgsHolder(
         date="2022-05-25",
-        depth=28,
+        depth=7,
         src_path="s3a://data-ice-lake-04/messager-data/analytics/cleaned-events",
     )
     try:
