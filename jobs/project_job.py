@@ -143,20 +143,22 @@ class SparkRunner:
 
         return sdf
 
-    def _get_event_city(
-        self, sdf: pyspark.sql.DataFrame, patition_by: Union[str, List[str]]
-    ) -> pyspark.sql.DataFrame:
+    def _get_event_city(self, sdf: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
         cities_coords_sdf = self._get_coordinates_dataframe()
 
         sdf = (
             sdf.crossJoin(cities_coords_sdf)
-            .withColumn("dlat", f.radians(f.col("lat")) - f.radians(f.col("city_lat")))
-            .withColumn("dlon", f.radians(f.col("lon")) - f.radians(f.col("city_lon")))
+            .withColumn(
+                "dlat", f.radians(f.col("msg_lat")) - f.radians(f.col("city_lat"))
+            )
+            .withColumn(
+                "dlon", f.radians(f.col("msg_lon")) - f.radians(f.col("city_lon"))
+            )
             .withColumn(
                 "distance_a",
                 f.sin(f.col("dlat") / 2) ** 2
                 + f.cos(f.radians(f.col("city_lat")))
-                * f.cos(f.radians(f.col("lat")))
+                * f.cos(f.radians(f.col("msg_lat")))
                 * f.sin(f.col("dlon") / 2) ** 2,
             )
             .withColumn("distance_b", f.asin(f.sqrt(f.col("distance_a"))))
@@ -164,7 +166,7 @@ class SparkRunner:
             .withColumn(
                 "city_dist_rnk",
                 f.row_number().over(
-                    Window().partitionBy(patition_by).orderBy(f.asc("distance"))
+                    Window().partitionBy(f.col("message_id")).orderBy(f.asc("distance"))
                 ),
             )
             .where(f.col("city_dist_rnk") == 1)
@@ -309,21 +311,66 @@ class SparkRunner:
         #     events_sdf.lon,
         # )
 
-        reaction_sdf = events_sdf.where(events_sdf.event_type == "reaction").select(
-            events_sdf.event.datetime.alias("datetime"),
-            events_sdf.event.message_id.alias("message_id"),
-            events_sdf.event.reaction_from.alias("reaction_from"),
-            events_sdf.event.reaction_type.alias("reaction_type"),
-            events_sdf.event_type,
-            events_sdf.lat,
-            events_sdf.lon,
+        messages_sdf = (
+            events_sdf.where(events_sdf.event.message_from.isNotNull())
+            .select(
+                events_sdf.event.message_from.alias("user_id"),
+                events_sdf.event.message_id.alias("message_id"),
+                events_sdf.event.message_ts.alias("message_ts"),
+                events_sdf.event.datetime.alias("datetime"),
+                events_sdf.lat.alias("msg_lat"),
+                events_sdf.lon.alias("msg_lon"),
+            )
+            .withColumn(
+                "msg_ts",
+                f.when(f.col("message_ts").isNotNull(), f.col("message_ts")).otherwise(
+                    f.col("datetime")
+                ),
+            )
+            .drop("message_ts", "datetime")
         )
-        # reaction_sdf = self._get_event_city(
-        #     sdf=reaction_sdf,
-        #     patition_by=["message_id", "reaction_from", "reaction_type"],
-        # )
 
-        reaction_sdf.where(events_sdf.lat.isNull()).show(100)
+        messages_sdf = self._get_event_city(sdf=messages_sdf)
+
+        user_city_id_sdf = (
+            messages_sdf.withColumn(
+                "last_msg_city_id",
+                f.first(col="city_id", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
+                ),
+            )
+            .select("user_id", "last_msg_city_id")
+            .distinct()
+        )
+
+        reaction_sdf = (
+            events_sdf.where(events_sdf.event_type == "reaction")
+            .select(
+                events_sdf.event.datetime.alias("datetime"),
+                events_sdf.event.message_id.alias("message_id"),
+                events_sdf.event.reaction_from.alias("user_id"),
+                events_sdf.event.reaction_type.alias("reaction_type"),
+            )
+            .join(user_city_id_sdf, how="left", on="user_id")
+            .withColumn("week", f.weekofyear(f.col("datetime").cast("timestamp")))
+            .withColumn("month", f.month(f.col("datetime").cast("timestamp")))
+            .withColumn("zone_id", f.col("last_msg_city_id"))
+            .groupby("month", "week", "zone_id")
+            .agg(f.count("message_id").alias("week_reaction"))
+            .withColumn(
+                "month_reaction",
+                f.sum(f.col("week_reaction")).over(
+                    Window().partitionBy(f.col("month"))
+                ),
+            )
+        )
+        # todo registarition
+        messages_sdf.withColumn(
+            "registration_ts",
+            f.first(col="msg_ts", ignorenulls=True).over(
+                Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
+            ),
+        )
 
 
 def main() -> None:
