@@ -106,7 +106,7 @@ class SparkRunner:
         self.spark.stop()
         self.logger.info("Session stopped")
 
-    def _get_coordinates_dataframe(self) -> DataFrame:
+    def _get_cities_coordinates_dataframe(self) -> DataFrame:
         self.logger.debug("Getting cities coordinates dataframe")
 
         self.logger.debug("Reading data from s3")
@@ -147,31 +147,30 @@ class SparkRunner:
         self, dataframe: DataFrame, coord_cols_prefix: List[str]
     ) -> DataFrame:
         cols = [(i + "_lat", i + "_lon") for i in coord_cols_prefix]
-        lat_1st, lon_1st = cols[0]
-        lat_2nd, lon_2nd = cols[1]
+        lat_1, lon_1 = cols[0]
+        lat_2, lon_2 = cols[1]
 
-        if not all(
-            col in dataframe.columns for col in (lat_1st, lon_1st, lat_2nd, lon_2nd)
-        ):
+        if not all(col in dataframe.columns for col in (lat_1, lon_1, lat_2, lon_2)):
             raise AnalysisException(
                 "DataFrame should contains coordinates columns with names listed in `coord_cols_prefix` argument"
             )
 
         sdf = (
             dataframe.withColumn(
-                "dlat", f.radians(f.col(lat_1st)) - f.radians(f.col(lat_2nd))
+                "dlat", f.radians(f.col(lat_2)) - f.radians(f.col(lat_1))
             )
-            .withColumn("dlon", f.radians(f.col(lon_1st)) - f.radians(f.col(lon_2nd)))
+            .withColumn("dlon", f.radians(f.col(lon_2)) - f.radians(f.col(lon_1)))
             .withColumn(
                 "distance_a",
                 f.sin(f.col("dlat") / 2) ** 2
-                + f.cos(f.radians(f.col(lat_2nd)))
-                * f.cos(f.radians(f.col(lat_1st)))
+                + f.cos(f.radians(f.col(lat_1)))
+                * f.cos(f.radians(f.col(lat_2)))
                 * f.sin(f.col("dlon") / 2) ** 2,
             )
             .withColumn("distance_b", f.asin(f.sqrt(f.col("distance_a"))))
-            .withColumn("distance", 2 * 6371 * f.col("distance_b"))
-            .drop("dlat", "dlon", "distance_a", "distance_b")
+            .withColumn("distance_c", 2 * 6371 * f.col("distance_b"))
+            .withColumn("distance", f.round(f.col("distance_c"), 0))
+            .drop("dlat", "dlon", "distance_a", "distance_b", "distance_c")
         )
 
         return sdf
@@ -181,7 +180,7 @@ class SparkRunner:
         dataframe: DataFrame,
         event_type: Literal["message", "reaction", "subscription", "registration"],
     ) -> DataFrame:
-        cities_coords_sdf = self._get_coordinates_dataframe()
+        cities_coords_sdf = self._get_cities_coordinates_dataframe()
 
         partition_by = (
             ["user_id", "subscription_channel"]
@@ -212,43 +211,6 @@ class SparkRunner:
             )
         )
 
-        # todo delete this part if abowe is OK
-
-        # dataframe = (
-        #     sdf.crossJoin(cities_coords_sdf)
-        #     .withColumn(
-        #         "dlat", f.radians(f.col("event_lat")) - f.radians(f.col("city_lat"))
-        #     )
-        #     .withColumn(
-        #         "dlon", f.radians(f.col("event_lon")) - f.radians(f.col("city_lon"))
-        #     )
-        #     .withColumn(
-        #         "distance_a",
-        #         f.sin(f.col("dlat") / 2) ** 2
-        #         + f.cos(f.radians(f.col("city_lat")))
-        #         * f.cos(f.radians(f.col("event_lat")))
-        #         * f.sin(f.col("dlon") / 2) ** 2,
-        #     )
-        #     .withColumn("distance_b", f.asin(f.sqrt(f.col("distance_a"))))
-        #     .withColumn("distance", 2 * 6371 * f.col("distance_b"))
-        #     .withColumn(
-        #         "city_dist_rnk",
-        #         f.row_number().over(
-        #             Window().partitionBy(partition_by).orderBy(f.asc("distance"))
-        #         ),
-        #     )
-        #     .where(f.col("city_dist_rnk") == 1)
-        #     .drop(
-        #         "city_lat",
-        #         "city_lon",
-        #         "dlat",
-        #         "dlon",
-        #         "distance_a",
-        #         "distance_b",
-        #         "distance",
-        #         "city_dist_rnk",
-        #     )
-        # )
         return sdf
 
     def compute_users_info_datamart(self, holder: ArgsHolder):
@@ -333,12 +295,12 @@ class SparkRunner:
                     timestamp=f.col("last_msg_ts"), tz="Australia/Sydney"
                 ),
             )
-            .select("user_id", "act_city", "local_time")
+            .select("user_id", "act_city", "city_id", "local_time")
             .distinct()
             .join(travels, how="left", on="user_id")
         )
 
-        sdf.show(100)  # todo save it
+        sdf.write.parquet("s3a://data-ice-lake-04/messager-data/tmp/users-info")
 
     def compute_location_zone_agg_datamart(self, holder: ArgsHolder):
         # src_paths = self._get_src_paths(holder=holder)
@@ -607,7 +569,7 @@ class SparkRunner:
             .repartitionByRange(92, "user_id", "contact_id")
         )
 
-        # * пользователи подписанные на один и тот же канал
+        # * все пользователи подписавшиеся на оидн из каналов
         subs_sdf = (
             events_sdf.where(events_sdf.event_type == "subscription")
             .where(events_sdf.event.subscription_channel.isNotNull())
@@ -616,19 +578,30 @@ class SparkRunner:
                 events_sdf.event.subscription_channel.alias("subscription_channel"),
                 events_sdf.event.user.alias("user_id"),
             )
-            .distinct()
+            .drop_duplicates(subset=["user_id", "subscription_channel"])
         )
 
-        subs_sdf = subs_sdf.join(
-            subs_sdf.withColumnRenamed("user_id", "contact_id"),
-            on="subscription_channel",
-            how="cross",
-        ).repartitionByRange(92, "user_id", "contact_id")
+        # * пользователи подписанные на один и тот же канал
+        subs_sdf = (
+            subs_sdf.withColumnRenamed("user_id", "left_user")
+            .join(
+                subs_sdf.withColumnRenamed("user_id", "right_user"),
+                on="subscription_channel",
+                how="cross",
+            )
+            .where(f.col("left_user") != f.col("right_user"))
+            .repartitionByRange(92, "left_user", "right_user")
+        )
 
         # * убрать пользователей которые переписывались
         users_for_rec = subs_sdf.join(
-            real_contacts_sdf, on=["user_id", "contact_id"], how="left_anti"
-        ).repartitionByRange(92, "user_id", "contact_id")
+            real_contacts_sdf,
+            on=[
+                subs_sdf.left_user == real_contacts_sdf.user_id,
+                subs_sdf.right_user == real_contacts_sdf.contact_id,
+            ],
+            how="left_anti",
+        )
 
         # * все пользователи которые писали сообщения -> координаты последнего отправленого сообщения
         messages_sdf = (
@@ -659,22 +632,44 @@ class SparkRunner:
             .repartitionByRange(92, "user_id")
         )
 
-        users_for_rec.join(
-            messages_sdf.select(
-                f.col("user_id"),
-                f.col("event_lat").alias("user_lat"),
-                f.col("event_lon").alias("user_lon"),
-            ),
+        users_for_rec = (
+            users_for_rec.join(
+                messages_sdf.select(
+                    f.col("user_id"),
+                    f.col("event_lat").alias("left_user_lat"),
+                    f.col("event_lon").alias("left_user_lon"),
+                ),
+                how="left",
+                on=[users_for_rec.left_user == messages_sdf.user_id],
+            )
+            .drop("user_id")
+            .join(
+                messages_sdf.select(
+                    f.col("user_id"),
+                    f.col("event_lat").alias("right_user_lat"),
+                    f.col("event_lon").alias("right_user_lon"),
+                ),
+                how="left",
+                on=[users_for_rec.right_user == messages_sdf.user_id],
+            )
+            .drop("user_id")
+            .where(f.col("left_user_lat").isNotNull())
+            .where(f.col("right_user_lat").isNotNull())
+        )
+
+        df = self._compute_distance(
+            dataframe=users_for_rec, coord_cols_prefix=["left_user", "right_user"]
+        )
+        users_info_sdf = self.spark.read.parquet(  # todo кажется тут идет что-то не так, потому что на выходе дублируеются user_id
+            "s3a://data-ice-lake-04/messager-data/tmp/users-info"
+        )
+
+        df.where(df.distance <= 1).select("left_user", "right_user").distinct().join(
+            users_info_sdf.select("user_id", "city_id", "local_time"),
+            on=[df.left_user == users_info_sdf.user_id],
             how="left",
-            on="user_id",
-        ).join(
-            messages_sdf.select(
-                f.col("user_id"),
-                f.col("event_lat").alias("contact_lat"),
-                f.col("event_lon").alias("contact_lon"),
-            ),
-            how="left",
-            on=[users_for_rec.contact_id == messages_sdf.user_id],
+        ).select(
+            "left_user", "right_user", f.col("city_id").alias("zone_id"), "local_time"
         ).show(
             200
         )
@@ -688,7 +683,7 @@ def main() -> None:
     )
     try:
         spark = SparkRunner()
-        spark.init_session(app_name="testing-app", log4j_level="INFO")
+        spark.init_session(app_name="testing-app", log4j_level="WARN")
         spark.compute_friend_recomendation_datamart(holder=holder)
 
     except (CapturedException, AnalysisException) as e:
