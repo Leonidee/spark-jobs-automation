@@ -98,7 +98,7 @@ class SparkRunner:
         self.spark = SparkSession.builder.master("yarn").appName(app_name).getOrCreate()
         self.spark.sparkContext.setLogLevel(log4j_level)
 
-        self.logger.info(f"Log4j level set to {log4j_level}")
+        self.logger.info(f"Log4j level set to: {log4j_level}")
 
     def stop_session(self) -> None:
         """Stop active Spark Session"""
@@ -143,29 +143,61 @@ class SparkRunner:
 
         return sdf
 
-    def _get_event_city(
-        self, sdf: pyspark.sql.DataFrame, partition_by: Union[str, List[str]]
-    ) -> pyspark.sql.DataFrame:
-        cities_coords_sdf = self._get_coordinates_dataframe()
+    def _compute_distance(
+        self, dataframe: DataFrame, coord_cols_prefix: List[str]
+    ) -> DataFrame:
+        cols = [(i + "_lat", i + "_lon") for i in coord_cols_prefix]
+        lat_1st, lon_1st = cols[0]
+        lat_2nd, lon_2nd = cols[1]
+
+        if not all(
+            col in dataframe.columns for col in (lat_1st, lon_1st, lat_2nd, lon_2nd)
+        ):
+            raise AnalysisException(
+                "DataFrame should contains coordinates columns with names listed in `coord_cols_prefix` argument"
+            )
 
         sdf = (
-            sdf.crossJoin(cities_coords_sdf)
-            .withColumn(
-                "dlat", f.radians(f.col("event_lat")) - f.radians(f.col("city_lat"))
+            dataframe.withColumn(
+                "dlat", f.radians(f.col(lat_1st)) - f.radians(f.col(lat_2nd))
             )
-            .withColumn(
-                "dlon", f.radians(f.col("event_lon")) - f.radians(f.col("city_lon"))
-            )
+            .withColumn("dlon", f.radians(f.col(lon_1st)) - f.radians(f.col(lon_2nd)))
             .withColumn(
                 "distance_a",
                 f.sin(f.col("dlat") / 2) ** 2
-                + f.cos(f.radians(f.col("city_lat")))
-                * f.cos(f.radians(f.col("event_lat")))
+                + f.cos(f.radians(f.col(lat_2nd)))
+                * f.cos(f.radians(f.col(lat_1st)))
                 * f.sin(f.col("dlon") / 2) ** 2,
             )
             .withColumn("distance_b", f.asin(f.sqrt(f.col("distance_a"))))
             .withColumn("distance", 2 * 6371 * f.col("distance_b"))
-            .withColumn(
+            .drop("dlat", "dlon", "distance_a", "distance_b")
+        )
+
+        return sdf
+
+    def _get_event_location(
+        self,
+        dataframe: DataFrame,
+        event_type: Literal["message", "reaction", "subscription", "registration"],
+    ) -> DataFrame:
+        cities_coords_sdf = self._get_coordinates_dataframe()
+
+        partition_by = (
+            ["user_id", "subscription_channel"]
+            if event_type == "subscription"
+            else "message_id"
+        )
+
+        sdf = dataframe.crossJoin(cities_coords_sdf)
+
+        sdf = self._compute_distance(
+            dataframe=sdf,
+            coord_cols_prefix=["event", "city"],
+        )
+
+        sdf = (
+            sdf.withColumn(
                 "city_dist_rnk",
                 f.row_number().over(
                     Window().partitionBy(partition_by).orderBy(f.asc("distance"))
@@ -175,39 +207,75 @@ class SparkRunner:
             .drop(
                 "city_lat",
                 "city_lon",
-                "dlat",
-                "dlon",
-                "distance_a",
-                "distance_b",
                 "distance",
                 "city_dist_rnk",
             )
         )
+
+        # todo delete this part if abowe is OK
+
+        # dataframe = (
+        #     sdf.crossJoin(cities_coords_sdf)
+        #     .withColumn(
+        #         "dlat", f.radians(f.col("event_lat")) - f.radians(f.col("city_lat"))
+        #     )
+        #     .withColumn(
+        #         "dlon", f.radians(f.col("event_lon")) - f.radians(f.col("city_lon"))
+        #     )
+        #     .withColumn(
+        #         "distance_a",
+        #         f.sin(f.col("dlat") / 2) ** 2
+        #         + f.cos(f.radians(f.col("city_lat")))
+        #         * f.cos(f.radians(f.col("event_lat")))
+        #         * f.sin(f.col("dlon") / 2) ** 2,
+        #     )
+        #     .withColumn("distance_b", f.asin(f.sqrt(f.col("distance_a"))))
+        #     .withColumn("distance", 2 * 6371 * f.col("distance_b"))
+        #     .withColumn(
+        #         "city_dist_rnk",
+        #         f.row_number().over(
+        #             Window().partitionBy(partition_by).orderBy(f.asc("distance"))
+        #         ),
+        #     )
+        #     .where(f.col("city_dist_rnk") == 1)
+        #     .drop(
+        #         "city_lat",
+        #         "city_lon",
+        #         "dlat",
+        #         "dlon",
+        #         "distance_a",
+        #         "distance_b",
+        #         "distance",
+        #         "city_dist_rnk",
+        #     )
+        # )
         return sdf
 
-    def compute_step_one(self, holder: ArgsHolder):
+    def compute_users_info_datamart(self, holder: ArgsHolder):
         self.logger.debug("Computing city to each message")
 
         self.logger.debug("Getting input data")
 
-        src_paths = self._get_src_paths(holder=holder)
-        events_sdf = self.spark.read.parquet(*src_paths).where(
-            "event_type == 'message'"
-        )
+        # src_paths = self._get_src_paths(holder=holder)
+        # events_sdf = self.spark.read.parquet(*src_paths)
 
-        cities_coords_sdf = self._get_coordinates_dataframe()
+        # # todo провемужуточный этап. удалить
+        events_sdf = self.spark.read.parquet(
+            "s3a://data-ice-lake-04/messager-data/tmp/step-two-01",
+        )
 
         self.logger.debug("Preparing dataframe")
 
         sdf = (
-            events_sdf.where(events_sdf.event.message_from.isNotNull())
+            events_sdf.where(events_sdf.event_type == "message")
+            .where(events_sdf.event.message_from.isNotNull())
             .select(
                 events_sdf.event.message_from.alias("user_id"),
                 events_sdf.event.message_id.alias("message_id"),
                 events_sdf.event.message_ts.alias("message_ts"),
                 events_sdf.event.datetime.alias("datetime"),
-                events_sdf.lat.alias("msg_lat"),
-                events_sdf.lon.alias("msg_lon"),
+                events_sdf.lat.alias("event_lat"),
+                events_sdf.lon.alias("event_lon"),
             )
             .withColumn(
                 "msg_ts",
@@ -215,51 +283,13 @@ class SparkRunner:
                     f.col("datetime")
                 ),
             )
+            .drop("message_ts", "datetime")
         )
+
         self.logger.debug("Getting main messages dataframe")
         self.logger.debug("Processing...")
 
-        sdf = (
-            sdf.crossJoin(cities_coords_sdf)
-            .withColumn(
-                "dlat", f.radians(f.col("msg_lat")) - f.radians(f.col("city_lat"))
-            )
-            .withColumn(
-                "dlon", f.radians(f.col("msg_lon")) - f.radians(f.col("city_lon"))
-            )
-            .withColumn(
-                "distance_a",
-                f.sin(f.col("dlat") / 2) ** 2
-                + f.cos(f.radians(f.col("city_lat")))
-                * f.cos(f.radians(f.col("msg_lat")))
-                * f.sin(f.col("dlon") / 2) ** 2,
-            )
-            .withColumn("distance_b", f.asin(f.sqrt(f.col("distance_a"))))
-            .withColumn("distance", 2 * 6371 * f.col("distance_b"))
-            .withColumn(
-                "city_dist_rnk",
-                f.row_number().over(
-                    Window().partitionBy("message_id").orderBy(f.asc("distance"))
-                ),
-            )
-            .where(f.col("city_dist_rnk") == 1)
-            .select(
-                "user_id",
-                "message_id",
-                f.col("msg_ts").cast(TimestampType()),
-                "city_name",
-            )
-        )
-
-        sdf = sdf.withColumn(
-            "act_city",
-            f.first(col="city_name", ignorenulls=True).over(
-                Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
-            ),
-        ).withColumn(
-            "local_time",
-            f.from_utc_timestamp(timestamp=f.col("msg_ts"), tz="Australia/Sydney"),
-        )
+        sdf = self._get_event_location(dataframe=sdf, event_type="message")
 
         travels = (
             sdf.withColumn(
@@ -284,9 +314,33 @@ class SparkRunner:
             )
         )
 
-        sdf.join(travels, how="left", on="user_id").show(100)  # todo save it
+        sdf = (
+            sdf.withColumn(
+                "act_city",
+                f.first(col="city_name", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
+                ),
+            )
+            .withColumn(
+                "last_msg_ts",
+                f.first(col="msg_ts", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
+                ),
+            )
+            .withColumn(
+                "local_time",
+                f.from_utc_timestamp(
+                    timestamp=f.col("last_msg_ts"), tz="Australia/Sydney"
+                ),
+            )
+            .select("user_id", "act_city", "local_time")
+            .distinct()
+            .join(travels, how="left", on="user_id")
+        )
 
-    def compute_step_two(self, holder: ArgsHolder):
+        sdf.show(100)  # todo save it
+
+    def compute_location_zone_agg_datamart(self, holder: ArgsHolder):
         # src_paths = self._get_src_paths(holder=holder)
         # events_sdf = self.spark.read.parquet(*src_paths)
 
@@ -333,19 +387,22 @@ class SparkRunner:
             .drop_duplicates(subset=["user_id", "message_id", "msg_ts"])
             .drop("datetime", "message_ts")
         )
-        messages_sdf = self._get_event_city(sdf=messages_sdf, partition_by="message_id")
+        messages_sdf = self._get_event_location(
+            dataframe=messages_sdf, event_type="message"
+        )
 
-        messages_sdf.withColumnRenamed("city_id", "zone_id").withColumn(
-            "week", f.weekofyear(f.col("msg_ts").cast("timestamp"))
-        ).withColumn("month", f.month(f.col("msg_ts").cast("timestamp"))).groupby(
-            "month", "week", "zone_id"
-        ).agg(
-            f.count("message_id").alias("week_message")
-        ).withColumn(
-            "month_message",
-            f.sum(f.col("week_message")).over(Window().partitionBy(f.col("month"))),
-        ).orderBy(
-            "month", "week", "zone_id"
+        messages_sdf = (
+            messages_sdf.withColumnRenamed("city_id", "zone_id")
+            .withColumn("week", f.weekofyear(f.col("msg_ts").cast("timestamp")))
+            .withColumn("month", f.month(f.col("msg_ts").cast("timestamp")))
+            .groupby("month", "week", "zone_id")
+            .agg(f.count("message_id").alias("week_message"))
+            .withColumn(
+                "month_message",
+                f.sum(f.col("week_message")).over(
+                    Window().partitionBy(f.col("zone_id"), f.col("month"))
+                ),
+            )
         )
 
         # * reactions
@@ -361,24 +418,22 @@ class SparkRunner:
             .drop_duplicates(subset=["user_id", "message_id", "datetime"])
             .where(f.col("event_lat").isNotNull())
         )
-        reaction_sdf = self._get_event_city(
-            sdf=reaction_sdf, partition_by=["message_id"]
+        reaction_sdf = self._get_event_location(
+            dataframe=reaction_sdf, event_type="reaction"
         )
-        reaction_sdf.withColumnRenamed("city_id", "zone_id").where(
-            f.col("event_lat").isNotNull()
-        ).withColumn(
-            "week", f.weekofyear(f.col("datetime").cast("timestamp"))
-        ).withColumn(
-            "month", f.month(f.col("datetime").cast("timestamp"))
-        ).groupby(
-            "month", "week", "zone_id"
-        ).agg(
-            f.count("message_id").alias("week_reaction")
-        ).withColumn(
-            "month_reaction",
-            f.sum(f.col("week_reaction")).over(Window().partitionBy(f.col("month"))),
-        ).orderBy(
-            "month", "week", "zone_id"
+        reaction_sdf = (
+            reaction_sdf.withColumnRenamed("city_id", "zone_id")
+            .where(f.col("event_lat").isNotNull())
+            .withColumn("week", f.weekofyear(f.col("datetime").cast("timestamp")))
+            .withColumn("month", f.month(f.col("datetime").cast("timestamp")))
+            .groupby("month", "week", "zone_id")
+            .agg(f.count("message_id").alias("week_reaction"))
+            .withColumn(
+                "month_reaction",
+                f.sum(f.col("week_reaction")).over(
+                    Window().partitionBy(f.col("zone_id"), f.col("month"))
+                ),
+            )
         )
 
         # * registrations
@@ -414,49 +469,26 @@ class SparkRunner:
                 ),
             )
             .where(f.col("is_reg") == f.lit(1))
+            .drop("is_reg", "registration_ts")
         )
-        registrations_sdf = self._get_event_city(
-            sdf=registrations_sdf, partition_by="message_id"
+        registrations_sdf = self._get_event_location(
+            dataframe=registrations_sdf, event_type="registration"
         )
-        registrations_sdf.show(100)
-        # output:
-        # +-------+----------+-------------------+------------------+--------------------+-------+-----------+-------+-----------+
-        # |user_id|message_id|          event_lat|         event_lon|              msg_ts|city_id|  city_name|city_id|  city_name|
-        # +-------+----------+-------------------+------------------+--------------------+-------+-----------+-------+-----------+
-        # |  15075|       241| -36.92896843143081|145.54618333996672|2021-03-10 11:59:...|      2|  Melbourne|      2|  Melbourne|
-        # |  74050|       564| -32.48793495940688|116.16142792425087|2021-03-08 09:08:...|      4|      Perth|      4|      Perth|
-        # |  35555|       830| -27.27101616192863|152.76754157767434|2021-03-07 05:34:...|      3|   Brisbane|      3|   Brisbane|
-        # |  92952|      1319| -37.03753727328049|145.80520871842035|2021-03-04 02:27:...|      2|  Melbourne|      2|  Melbourne|
-        # |  48080|      1403| -33.06680911131794|151.43782423434314|2021-03-05 10:55:...|      9|  Newcastle|      9|  Newcastle|
-        # |  96933|      1542|-12.080178265116134|131.67815143074995|2021-03-07 13:14:...|     17|     Darwin|     17|     Darwin|
-        # | 154197|      1760| -36.14127736049837|144.70370729240182|2021-03-08 01:35:...|     19|    Bendigo|     19|    Bendigo|
-        # | 157138|      1776| -33.15871117421965|151.86530884542856|2021-03-03 03:22:...|      9|  Newcastle|      9|  Newcastle|
-        # | 115961|      2033|-32.163291264830555|  152.246882279569|2021-03-08 07:55:...|     23|   Maitland|     23|   Maitland|
-        # | 122190|      2300| -26.69065260537344|153.07936719647674|2021-03-07 21:28:...|      3|   Brisbane|      3|   Brisbane|
-        # |  98047|      2355| -33.93843007370931|151.22974313585436|2021-03-03 11:38:...|      1|     Sydney|      1|     Sydney|
-        # | 115017|      2797|-31.826835759190313|151.86964692003718|2021-03-07 08:02:...|     23|   Maitland|     23|   Maitland|
-        # |  23807|      2941| -32.35857628628465| 152.4601435320122|2021-03-10 00:30:...|      9|  Newcastle|      9|  Newcastle|
 
-        # todo тут какой то косяк в коде ниже
-
-        # registrations_sdf.withColumnRenamed("city_id", "zone_id").where(
-        #     f.col("event_lat").isNotNull()
-        # ).withColumn(
-        #     "week", f.weekofyear(f.col("registration_ts").cast("timestamp"))
-        # ).withColumn(
-        #     "month", f.month(f.col("registration_ts").cast("timestamp"))
-        # ).groupby(
-        #     "month", "week", "zone_id"
-        # ).agg(
-        #     f.count("user_id").alias("week_user")
-        # ).withColumn(
-        #     "month_user",
-        #     f.sum(f.col("week_user")).over(Window().partitionBy(f.col("month"))),
-        # ).orderBy(
-        #     "month", "week", "zone_id"
-        # ).show(
-        #     100
-        # )
+        registrations_sdf = (
+            registrations_sdf.withColumnRenamed("city_id", "zone_id")
+            .where(f.col("event_lat").isNotNull())
+            .withColumn("week", f.weekofyear(f.col("msg_ts").cast("timestamp")))
+            .withColumn("month", f.month(f.col("msg_ts").cast("timestamp")))
+            .groupby("month", "week", "zone_id")
+            .agg(f.count("user_id").alias("week_user"))
+            .withColumn(
+                "month_user",
+                f.sum(f.col("week_user")).over(
+                    Window().partitionBy(f.col("zone_id"), f.col("month"))
+                ),
+            )
+        )
 
         # * subscriptions
         subscriptions_sdf = (
@@ -472,24 +504,179 @@ class SparkRunner:
             .where(f.col("event_lat").isNotNull())
         )
 
-        subscriptions_sdf = self._get_event_city(
-            sdf=subscriptions_sdf, partition_by=["user_id", "subscription_channel"]
+        subscriptions_sdf = self._get_event_location(
+            dataframe=subscriptions_sdf, event_type="subscription"
         )
-        subscriptions_sdf.withColumnRenamed("city_id", "zone_id").where(
-            f.col("event_lat").isNotNull()
-        ).withColumn(
-            "week", f.weekofyear(f.col("datetime").cast("timestamp"))
-        ).withColumn(
-            "month", f.month(f.col("datetime").cast("timestamp"))
-        ).groupby(
-            "month", "week", "zone_id"
-        ).agg(
-            f.count("user_id").alias("week_subscription")
-        ).withColumn(
+        subscriptions_sdf = (
+            subscriptions_sdf.withColumnRenamed("city_id", "zone_id")
+            .where(f.col("event_lat").isNotNull())
+            .withColumn("week", f.weekofyear(f.col("datetime").cast("timestamp")))
+            .withColumn("month", f.month(f.col("datetime").cast("timestamp")))
+            .groupby("month", "week", "zone_id")
+            .agg(f.count("user_id").alias("week_subscription"))
+            .withColumn(
+                "month_subscription",
+                f.sum(f.col("week_subscription")).over(
+                    Window().partitionBy(f.col("zone_id"), f.col("month"))
+                ),
+            )
+        )
+
+        # * JOINING
+
+        cols = ["zone_id", "week", "month"]
+
+        messages_sdf.join(other=reaction_sdf, on=cols).join(
+            other=registrations_sdf, on=cols
+        ).join(other=subscriptions_sdf, on=cols).orderBy(cols).select(
+            "zone_id",
+            "week",
+            "month",
+            "week_message",
+            "week_reaction",
+            "week_subscription",
+            "week_user",
+            "month_message",
+            "month_reaction",
             "month_subscription",
-            f.sum(f.col("week_subscription")).over(
-                Window().partitionBy(f.col("month"))
+            "month_user",
+        ).show(
+            100
+        )
+        # todo add logging and save results
+
+    def compute_friend_recomendation_datamart(self, holder: ArgsHolder):
+        # src_paths = self._get_src_paths(holder=holder)
+        # events_sdf = self.spark.read.parquet(*src_paths)
+
+        # # todo провемужуточный этап. удалить
+        events_sdf = self.spark.read.parquet(
+            "s3a://data-ice-lake-04/messager-data/tmp/step-two-01",
+        )
+
+        # sdf = events_sdf.select(
+        #     events_sdf.event.message_from.alias("message_from"),
+        #     events_sdf.event.message_to.alias("message_to"),
+        #     events_sdf.event.reaction_from.alias("reaction_from"),
+        #     events_sdf.event.subscription_user.alias("subscription_user"),
+        #     events_sdf.event.user.alias("user"),
+        # )
+
+        # all_users_sdf = (
+        #     sdf.select(f.col("message_from").alias("user_id"))
+        #     .distinct()
+        #     .union(sdf.select(f.col("message_to").alias("user_id")).distinct())
+        #     .union(sdf.select(f.col("reaction_from").alias("user_id")).distinct())
+        #     .union(sdf.select(f.col("subscription_user").alias("user_id")).distinct())
+        #     .union(sdf.select(f.col("user").alias("user_id")).distinct())
+        #     .distinct()
+        # )
+        # all_contacts_sdf = (
+        #     all_users_sdf.crossJoin(
+        #         all_users_sdf.withColumnRenamed("user_id", "contact_id")
+        #     )
+        #     .where(f.col("user_id") != f.col("contact_id"))
+        #     .select("user_id", "contact_id")
+        #     .distinct()
+        # )
+
+        # all_contacts_sdf.show(100)
+
+        # print(all_contacts_sdf.count())
+
+        # * реальные контакты
+        real_contacts_sdf = (
+            events_sdf.where(events_sdf.event_type == "message")
+            .where(events_sdf.event.message_to.isNotNull())
+            .select(
+                events_sdf.event.message_from.alias("message_from"),
+                events_sdf.event.message_to.alias("message_to"),
+            )
+            .withColumn(
+                "user_id",
+                f.explode(f.array(f.col("message_from"), f.col("message_to"))),
+            )
+            .withColumn(
+                "contact_id",
+                f.when(
+                    f.col("user_id") == f.col("message_from"), f.col("message_to")
+                ).otherwise(f.col("message_from")),
+            )
+            .select("user_id", "contact_id")
+            .distinct()
+            .repartitionByRange(92, "user_id", "contact_id")
+        )
+
+        # * пользователи подписанные на один и тот же канал
+        subs_sdf = (
+            events_sdf.where(events_sdf.event_type == "subscription")
+            .where(events_sdf.event.subscription_channel.isNotNull())
+            .where(events_sdf.event.user.isNotNull())
+            .select(
+                events_sdf.event.subscription_channel.alias("subscription_channel"),
+                events_sdf.event.user.alias("user_id"),
+            )
+            .distinct()
+        )
+
+        subs_sdf = subs_sdf.join(
+            subs_sdf.withColumnRenamed("user_id", "contact_id"),
+            on="subscription_channel",
+            how="cross",
+        ).repartitionByRange(92, "user_id", "contact_id")
+
+        # * убрать пользователей которые переписывались
+        users_for_rec = subs_sdf.join(
+            real_contacts_sdf, on=["user_id", "contact_id"], how="left_anti"
+        ).repartitionByRange(92, "user_id", "contact_id")
+
+        # * все пользователи которые писали сообщения -> координаты последнего отправленого сообщения
+        messages_sdf = (
+            events_sdf.where(events_sdf.event_type == "message")
+            .where(events_sdf.event.message_from.isNotNull())
+            .select(
+                events_sdf.event.message_from.alias("user_id"),
+                events_sdf.event.message_ts.alias("message_ts"),
+                events_sdf.event.datetime.alias("datetime"),
+                events_sdf.lat.alias("event_lat"),
+                events_sdf.lon.alias("event_lon"),
+            )
+            .withColumn(
+                "msg_ts",
+                f.when(f.col("message_ts").isNotNull(), f.col("message_ts")).otherwise(
+                    f.col("datetime")
+                ),
+            )
+            .withColumn(
+                "last_msg_ts",
+                f.first(col="msg_ts", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(f.asc("msg_ts"))
+                ),
+            )
+            .where(f.col("msg_ts") == f.col("last_msg_ts"))
+            .select("user_id", "event_lat", "event_lon")
+            .distinct()
+            .repartitionByRange(92, "user_id")
+        )
+
+        users_for_rec.join(
+            messages_sdf.select(
+                f.col("user_id"),
+                f.col("event_lat").alias("user_lat"),
+                f.col("event_lon").alias("user_lon"),
             ),
+            how="left",
+            on="user_id",
+        ).join(
+            messages_sdf.select(
+                f.col("user_id"),
+                f.col("event_lat").alias("contact_lat"),
+                f.col("event_lon").alias("contact_lon"),
+            ),
+            how="left",
+            on=[users_for_rec.contact_id == messages_sdf.user_id],
+        ).show(
+            200
         )
 
 
@@ -501,8 +688,8 @@ def main() -> None:
     )
     try:
         spark = SparkRunner()
-        spark.init_session(app_name="testing-app")
-        spark.compute_step_two(holder=holder)
+        spark.init_session(app_name="testing-app", log4j_level="INFO")
+        spark.compute_friend_recomendation_datamart(holder=holder)
 
     except (CapturedException, AnalysisException) as e:
         logger.exception(e)
