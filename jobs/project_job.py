@@ -53,6 +53,8 @@ class ArgsHolder(BaseModel):
     date: str
     depth: int
     src_path: str
+    tgt_path: str
+    processed_dttm: str
 
 
 class SparkRunner:
@@ -87,7 +89,7 @@ class SparkRunner:
     ) -> None:
         """Configure and initialize Spark Session
 
-        Args:
+        ## Args:
             app_name (str): Name of Spark Application
             log4j_level (str): Spark Context logging level. Defaults to `WARN`
         """
@@ -105,6 +107,12 @@ class SparkRunner:
         self.logger.info("Session stopped")
 
     def _get_cities_coordinates_dataframe(self) -> DataFrame:
+        """
+        Get dataframe with coordinates of each city
+
+        ## Returns:
+            `pyspark.sql.DataFrame`
+        """
         self.logger.debug("Getting cities coordinates dataframe")
 
         self.logger.debug("Reading data from s3")
@@ -127,8 +135,6 @@ class SparkRunner:
             }
         )
 
-        self.logger.debug("Done")
-
         schema = StructType(
             [
                 StructField("city_id", IntegerType(), nullable=False),
@@ -140,22 +146,28 @@ class SparkRunner:
         self.logger.debug("Creating pyspark.sql.DataFrame")
         sdf = self.spark.createDataFrame(df, schema=schema)
 
-        self.logger.debug("Done")
-
         return sdf
 
     def _compute_distance(
         self, dataframe: DataFrame, coord_cols_prefix: List[str]
     ) -> DataFrame:
+        "Compute distance between two point row-wise on `pyspark.sql.DataFrame`"
+
+        self.logger.debug("Computing distances")
+
+        self.logger.debug("Collecting columns with coordinates")
         cols = [(i + "_lat", i + "_lon") for i in coord_cols_prefix]
         lat_1, lon_1 = cols[0]
         lat_2, lon_2 = cols[1]
 
+        self.logger.debug("Checking if each columns exists in dataframe")
         if not all(col in dataframe.columns for col in (lat_1, lon_1, lat_2, lon_2)):
             raise AnalysisException(
                 "DataFrame should contains coordinates columns with names listed in `coord_cols_prefix` argument"
             )
+        self.logger.debug("OK")
 
+        self.logger.debug("Processing...")
         sdf = (
             dataframe.withColumn(
                 "dlat", f.radians(f.col(lat_2)) - f.radians(f.col(lat_1))
@@ -181,6 +193,18 @@ class SparkRunner:
         dataframe: DataFrame,
         event_type: Literal["message", "reaction", "subscription", "registration"],
     ) -> DataFrame:
+        """
+        Gets city to each event of given dataframe
+
+        ## Args:
+            dataframe (`pyspark.sql.DataFrame`)
+            event_type (`Literal[str]`)
+
+        ## Returns:
+            `pyspark.sql.DataFrame`
+        """
+        self.logger.debug(f"Getting location of `{event_type}` event type")
+
         cities_coords_sdf = self._get_cities_coordinates_dataframe()
 
         partition_by = (
@@ -188,14 +212,16 @@ class SparkRunner:
             if event_type == "subscription"
             else "message_id"
         )
-
+        self.logger.debug(
+            "Joining given dataframe with cities coordinates. Processing..."
+        )
         sdf = dataframe.crossJoin(cities_coords_sdf)
 
         sdf = self._compute_distance(
             dataframe=sdf,
             coord_cols_prefix=["event", "city"],
         )
-
+        self.logger.debug("Collecting resulting dataframe")
         sdf = (
             sdf.withColumn(
                 "city_dist_rnk",
@@ -215,14 +241,21 @@ class SparkRunner:
         return sdf
 
     def _get_users_actual_data_dataframe(self, holder: ArgsHolder) -> DataFrame:
-        # src_paths = self._get_src_paths(holder=holder)
-        # events_sdf = self.spark.read.parquet(*src_paths)
+        """
+        Returns dataframe with user information based on sent messages
 
-        # # todo провемужуточный этап. удалить
-        events_sdf = self.spark.read.parquet(
-            "s3a://data-ice-lake-04/messager-data/tmp/step-two-01",
-        )
+        ## Args:
+            holder (`ArgsHolder`)
 
+        ## Returns:
+            `pyspark.sql.DataFrame`: DataFrame with columns:`user_id`, `message_id`, `msg_ts`, `city_name`, `act_city`, `act_city_id`, `local_time`
+        """
+        self.logger.debug(f"Getting input data from: {holder.src_path}")
+
+        src_paths = self._get_src_paths(holder=holder)
+        events_sdf = self.spark.read.parquet(*src_paths)
+
+        self.logger.debug("Collecting dataframe")
         sdf = (
             events_sdf.where(events_sdf.event_type == "message")
             .where(events_sdf.event.message_from.isNotNull())
@@ -244,6 +277,8 @@ class SparkRunner:
         )
 
         sdf = self._get_event_location(dataframe=sdf, event_type="message")
+
+        self.logger.debug("Collecting resulting dataframe")
 
         sdf = (
             sdf.withColumn(
@@ -280,11 +315,21 @@ class SparkRunner:
                 "local_time",
             )
         )
+
         return sdf
 
     def compute_users_info_datamart(self, holder: ArgsHolder) -> None:
+        """
+        Compute and save user info datamart
+
+        ## Args:
+            holder (`ArgsHolder`)
+        """
+        self.logger.info("Starting collecting user info datamart")
+
         sdf = self._get_users_actual_data_dataframe(holder=holder)
 
+        self.logger.debug("Collecting dataframe with travels data. Processing...")
         travels_sdf = (
             sdf.withColumn(
                 "prev_city",
@@ -308,41 +353,58 @@ class SparkRunner:
             )
         )
 
+        self.logger.debug("Collecting resulting dataframe")
+
         sdf = (
             sdf.drop_duplicates(subset=["user_id"])
             .join(travels_sdf, how="left", on="user_id")
             .select("user_id", "act_city", "local_time", "travel_count", "travel_array")
         )
 
-        sdf.orderBy("user_id").show(250)  # todo save it
+        self.logger.info("Datamart collected")
+        self.logger.info("Writing results")
 
-    def compute_location_zone_agg_datamart(self, holder: ArgsHolder):
-        # src_paths = self._get_src_paths(holder=holder)
-        # events_sdf = self.spark.read.parquet(*src_paths)
+        processed_dt = datetime.strptime(
+            holder.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
+        ).date()
 
-        # # todo провемужуточный этап. удалить
-        events_sdf = self.spark.read.parquet(
-            "s3a://data-ice-lake-04/messager-data/tmp/step-two-01",
-        )
+        try:
+            sdf.repartition(1).write.parquet(
+                path=f"{holder.tgt_path}/date={processed_dt}",
+                mode="errorifexists",
+            )
+            self.logger.info(
+                f"Done! Results -> {holder.tgt_path}/date={processed_dt}"
+            )
+        except Exception:
+            self.logger.warning(
+                "Notice that target path is already exists and will be overwritten!"
+            )
+            self.logger.info("Overwriting...")
+            sdf.repartition(1).write.parquet(
+                path=f"{holder.tgt_path}/date={processed_dt}",
+                mode="overwrite",
+            )
+            self.logger.info(
+                f"Done! Results -> {holder.tgt_path}/date={processed_dt}"
+            )
 
-        # events_sdf.select(
-        #     events_sdf.event.datetime,
-        #     events_sdf.event.message_channel_to,
-        #     events_sdf.event.message_from,
-        #     events_sdf.event.message_group,
-        #     events_sdf.event.message_id,
-        #     events_sdf.event.message_to,
-        #     events_sdf.event.message_ts,
-        #     events_sdf.event.reaction_from,
-        #     events_sdf.event.reaction_type,
-        #     events_sdf.event.subscription_channel,
-        #     events_sdf.event.subscription_user,
-        #     events_sdf.event.user,
-        #     events_sdf.event_type,
-        #     events_sdf.lat,
-        #     events_sdf.lon,
-        # )
-        # * messages
+    def compute_location_zone_agg_datamart(self, holder: ArgsHolder) -> None:
+        """Compute and save location zone aggregeted datamart
+
+        Args:
+            holder (`ArgsHolder`)
+        """
+        self.logger.info("Staring collecting location zone aggregated datamart")
+
+        self.logger.debug(f"Getting input data from: {holder.src_path}")
+
+        src_paths = self._get_src_paths(holder=holder)
+        events_sdf = self.spark.read.parquet(*src_paths)
+
+        self.logger.debug("Collecing messages dataframe. Processing...")
+
+        # сборка messages
         messages_sdf = (
             events_sdf.where(events_sdf.event_type == "message")
             .where(events_sdf.event.message_from.isNotNull())
@@ -381,7 +443,9 @@ class SparkRunner:
             )
         )
 
-        # * reactions
+        self.logger.debug("Collecing reacitons dataframe. Processing...")
+
+        # сборка reactions
         reaction_sdf = (
             events_sdf.where(events_sdf.event_type == "reaction")
             .select(
@@ -412,7 +476,9 @@ class SparkRunner:
             )
         )
 
-        # * registrations
+        self.logger.debug("Collecing registrations dataframe. Processing...")
+
+        # сборка registrations
         registrations_sdf = (
             events_sdf.where(events_sdf.event_type == "message")
             .where(events_sdf.event.message_from.isNotNull())
@@ -466,7 +532,9 @@ class SparkRunner:
             )
         )
 
-        # * subscriptions
+        self.logger.debug("Collecing subscriptions dataframe. Processing...")
+
+        # сборка subscriptions
         subscriptions_sdf = (
             events_sdf.where(events_sdf.event_type == "subscription")
             .select(
@@ -498,34 +566,70 @@ class SparkRunner:
             )
         )
 
-        # * JOINING
+        self.logger.debug("Joining resulsts")
 
         cols = ["zone_id", "week", "month"]
-
-        messages_sdf.join(other=reaction_sdf, on=cols).join(
-            other=registrations_sdf, on=cols
-        ).join(other=subscriptions_sdf, on=cols).orderBy(cols).select(
-            "zone_id",
-            "week",
-            "month",
-            "week_message",
-            "week_reaction",
-            "week_subscription",
-            "week_user",
-            "month_message",
-            "month_reaction",
-            "month_subscription",
-            "month_user",
-        ).show(
-            100
+        sdf = (
+            messages_sdf.join(other=reaction_sdf, on=cols)
+            .join(other=registrations_sdf, on=cols)
+            .join(other=subscriptions_sdf, on=cols)
+            .orderBy(cols)
+            .select(
+                "zone_id",
+                "week",
+                "month",
+                "week_message",
+                "week_reaction",
+                "week_subscription",
+                "week_user",
+                "month_message",
+                "month_reaction",
+                "month_subscription",
+                "month_user",
+            )
         )
-        # todo add logging and save results
+        self.logger.info("Datamart collected")
 
-    def compute_friend_recommendation_datamart(
-        self, holder: ArgsHolder, dag_processed_dttm: datetime
-    ):
+        self.logger.info("Writing results")
+
+        processed_dt = datetime.strptime(
+            holder.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
+        ).date()
+
+        try:
+            sdf.repartition(1).write.parquet(
+                path=f"{holder.tgt_path}/date={processed_dt}",
+                mode="errorifexists",
+            )
+            self.logger.info(
+                f"Done! Results -> {holder.tgt_path}/date={processed_dt}"
+            )
+        except Exception:
+            self.logger.warning(
+                "Notice that target path is already exists and will be overwritten!"
+            )
+            self.logger.info("Overwriting...")
+            sdf.repartition(1).write.parquet(
+                path=f"{holder.tgt_path}/date={processed_dt}",
+                mode="overwrite",
+            )
+            self.logger.info(
+                f"Done! Results -> {holder.tgt_path}/date={processed_dt}"
+            )
+
+    def compute_friend_recommendation_datamart(self, holder: ArgsHolder) -> None:
+        """Compute and save friend recommendations datamart
+
+        Args:
+            holder (`ArgsHolder`)
+            dag_processed_dttm (`datetime`): `datetime` class object with processed timestamp
+        """
+        self.logger.info("Starting collecting friend recommendations datamart")
+
         src_paths = self._get_src_paths(holder=holder)
         events_sdf = self.spark.read.parquet(*src_paths)
+
+        self.logger.debug("Collecting dataframe with real contacts")
 
         # реальные контакты
         real_contacts_sdf = (
@@ -550,6 +654,7 @@ class SparkRunner:
             .repartitionByRange(92, "user_id", "contact_id")
         )
 
+        self.logger.debug("Collecting all users with subscriptions dataframe")
         #  все пользователи подписавшиеся на один из каналов (любой)
         subs_sdf = (
             events_sdf.where(events_sdf.event_type == "subscription")
@@ -562,6 +667,7 @@ class SparkRunner:
             .drop_duplicates(subset=["user_id", "subscription_channel"])
         )
 
+        self.logger.debug("Collecting users with same subsctiptions only dataframe")
         # пользователи подписанные на один и тот же канал
         subs_sdf = (
             subs_sdf.withColumnRenamed("user_id", "left_user")
@@ -574,6 +680,7 @@ class SparkRunner:
             .repartitionByRange(92, "left_user", "right_user")
         )
 
+        self.logger.debug("Excluding real contacts")
         #  убрать пользователей которые переписывались
         users_for_rec = subs_sdf.join(
             real_contacts_sdf,
@@ -584,6 +691,7 @@ class SparkRunner:
             how="left_anti",
         )
 
+        self.logger.debug("Collecting last message coordinates dataframe")
         # все пользователи которые писали сообщения -> координаты последнего отправленого сообщения
         messages_sdf = (
             events_sdf.where(events_sdf.event_type == "message")
@@ -613,6 +721,7 @@ class SparkRunner:
             .repartitionByRange(92, "user_id")
         )
 
+        self.logger.debug("Collecting coordinates for potential recomendations users")
         #  коорнинаты пользователей
         users_for_rec = (
             users_for_rec.join(
@@ -639,24 +748,59 @@ class SparkRunner:
             .where(f.col("right_user_lat").isNotNull())
         )
 
-        df = self._compute_distance(
+        sdf = self._compute_distance(
             dataframe=users_for_rec, coord_cols_prefix=["left_user", "right_user"]
         )
 
         users_info_sdf = self._get_users_actual_data_dataframe(holder=holder)
 
+        self.logger.debug("Collecting resulting dataframe")
+
         # сборка итога
-        df.where(df.distance <= 1).select("left_user", "right_user").distinct().join(
-            users_info_sdf.select("user_id", "act_city_id", "local_time").distinct(),
-            on=[df.left_user == users_info_sdf.user_id],
-            how="left",
-        ).withColumn("processed_dttm", f.lit(str(dag_processed_dttm))).select(
-            "left_user",
-            "right_user",
-            "processed_dttm",
-            f.col("act_city_id").alias("zone_id"),
-            "local_time",
+        sdf = (
+            sdf.where(sdf.distance <= 1)
+            .select("left_user", "right_user")
+            .distinct()
+            .join(
+                users_info_sdf.select(
+                    "user_id", "act_city_id", "local_time"
+                ).distinct(),
+                on=[sdf.left_user == users_info_sdf.user_id],
+                how="left",
+            )
+            .withColumn("processed_dttm", f.lit(holder.processed_dttm.replace("T", " "))
+            .select(
+                "left_user",
+                "right_user",
+                "processed_dttm",
+                f.col("act_city_id").alias("zone_id"),
+                "local_time",
+            )
         )
+        self.logger.info("Datamart collected")
+
+        self.logger.info("Writing results")
+
+        processed_dt = datetime.strptime(
+            holder.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
+        ).date()
+
+        try:
+            sdf.repartition(1).write.parquet(
+                path=f"{holder.tgt_path}/date={processed_dt}",
+                mode="errorifexists",
+            )
+            self.logger.info(f"Done! Results -> {holder.tgt_path}/date={processed_dt}")
+        except Exception:
+            self.logger.warning(
+                "Notice that target path is already exists and will be overwritten!"
+            )
+            self.logger.info("Overwriting...")
+            sdf.repartition(1).write.parquet(
+                path=f"{holder.tgt_path}/date={processed_dt}",
+                mode="overwrite",
+            )
+            self.logger.info(f"Done! Results -> {holder.tgt_path}/date={processed_dt}")
 
 
 def main() -> None:
@@ -664,12 +808,14 @@ def main() -> None:
         date="2022-03-12",
         depth=10,
         src_path="s3a://data-ice-lake-04/messager-data/analytics/geo-events",
+        tgt_path="s3a://data-ice-lake-04/messager-data/analytics/tmp/friend_recommendation_datamart",
+        processed_dttm=str(datetime.now()),
     )
     try:
         spark = SparkRunner()
-        spark.init_session(app_name="testing-app", log4j_level="WARN")
+        spark.init_session(app_name="testing-app", log4j_level="INFO")
         spark.compute_friend_recommendation_datamart(
-            holder=holder, dag_processed_dttm=datetime(2023, 5, 15)
+            holder=holder,
         )
 
     except (CapturedException, AnalysisException) as e:
