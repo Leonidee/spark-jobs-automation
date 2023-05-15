@@ -33,8 +33,6 @@ from pyspark.sql.types import (
     FloatType,
     TimestampType,
 )
-from pyspark import StorageLevel
-import pyspark
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
@@ -66,7 +64,7 @@ class SparkRunner:
 
     def _get_src_paths(
         self,
-        holder: Any,
+        holder: ArgsHolder,
     ) -> List[str]:
         self.logger.debug(f"Collecting src paths")
 
@@ -129,6 +127,8 @@ class SparkRunner:
             }
         )
 
+        self.logger.debug("Done")
+
         schema = StructType(
             [
                 StructField("city_id", IntegerType(), nullable=False),
@@ -137,6 +137,7 @@ class SparkRunner:
                 StructField("city_lon", FloatType(), nullable=False),
             ]
         )
+        self.logger.debug("Creating pyspark.sql.DataFrame")
         sdf = self.spark.createDataFrame(df, schema=schema)
 
         self.logger.debug("Done")
@@ -213,11 +214,7 @@ class SparkRunner:
 
         return sdf
 
-    def compute_users_info_datamart(self, holder: ArgsHolder):
-        self.logger.debug("Computing city to each message")
-
-        self.logger.debug("Getting input data")
-
+    def _get_users_actual_data_dataframe(self, holder: ArgsHolder) -> DataFrame:
         # src_paths = self._get_src_paths(holder=holder)
         # events_sdf = self.spark.read.parquet(*src_paths)
 
@@ -225,8 +222,6 @@ class SparkRunner:
         events_sdf = self.spark.read.parquet(
             "s3a://data-ice-lake-04/messager-data/tmp/step-two-01",
         )
-
-        self.logger.debug("Preparing dataframe")
 
         sdf = (
             events_sdf.where(events_sdf.event_type == "message")
@@ -248,12 +243,49 @@ class SparkRunner:
             .drop("message_ts", "datetime")
         )
 
-        self.logger.debug("Getting main messages dataframe")
-        self.logger.debug("Processing...")
-
         sdf = self._get_event_location(dataframe=sdf, event_type="message")
 
-        travels = (
+        sdf = (
+            sdf.withColumn(
+                "act_city",
+                f.first(col="city_name", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
+                ),
+            )
+            .withColumn(
+                "act_city_id",
+                f.first(col="city_id", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
+                ),
+            )
+            .withColumn(
+                "last_msg_ts",
+                f.first(col="msg_ts", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
+                ),
+            )
+            .withColumn(
+                "local_time",
+                f.from_utc_timestamp(
+                    timestamp=f.col("last_msg_ts"), tz="Australia/Sydney"
+                ),
+            )
+            .select(
+                "user_id",
+                "message_id",
+                "msg_ts",
+                "city_name",
+                "act_city",
+                "act_city_id",
+                "local_time",
+            )
+        )
+        return sdf
+
+    def compute_users_info_datamart(self, holder: ArgsHolder) -> None:
+        sdf = self._get_users_actual_data_dataframe(holder=holder)
+
+        travels_sdf = (
             sdf.withColumn(
                 "prev_city",
                 f.lag("city_name").over(
@@ -277,30 +309,12 @@ class SparkRunner:
         )
 
         sdf = (
-            sdf.withColumn(
-                "act_city",
-                f.first(col="city_name", ignorenulls=True).over(
-                    Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
-                ),
-            )
-            .withColumn(
-                "last_msg_ts",
-                f.first(col="msg_ts", ignorenulls=True).over(
-                    Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
-                ),
-            )
-            .withColumn(
-                "local_time",
-                f.from_utc_timestamp(
-                    timestamp=f.col("last_msg_ts"), tz="Australia/Sydney"
-                ),
-            )
-            .select("user_id", "act_city", "city_id", "local_time")
-            .distinct()
-            .join(travels, how="left", on="user_id")
+            sdf.drop_duplicates(subset=["user_id"])
+            .join(travels_sdf, how="left", on="user_id")
+            .select("user_id", "act_city", "local_time", "travel_count", "travel_array")
         )
 
-        sdf.write.parquet("s3a://data-ice-lake-04/messager-data/tmp/users-info")
+        sdf.orderBy("user_id").show(250)  # todo save it
 
     def compute_location_zone_agg_datamart(self, holder: ArgsHolder):
         # src_paths = self._get_src_paths(holder=holder)
@@ -507,46 +521,13 @@ class SparkRunner:
         )
         # todo add logging and save results
 
-    def compute_friend_recomendation_datamart(self, holder: ArgsHolder):
-        # src_paths = self._get_src_paths(holder=holder)
-        # events_sdf = self.spark.read.parquet(*src_paths)
+    def compute_friend_recommendation_datamart(
+        self, holder: ArgsHolder, dag_processed_dttm: datetime
+    ):
+        src_paths = self._get_src_paths(holder=holder)
+        events_sdf = self.spark.read.parquet(*src_paths)
 
-        # # todo провемужуточный этап. удалить
-        events_sdf = self.spark.read.parquet(
-            "s3a://data-ice-lake-04/messager-data/tmp/step-two-01",
-        )
-
-        # sdf = events_sdf.select(
-        #     events_sdf.event.message_from.alias("message_from"),
-        #     events_sdf.event.message_to.alias("message_to"),
-        #     events_sdf.event.reaction_from.alias("reaction_from"),
-        #     events_sdf.event.subscription_user.alias("subscription_user"),
-        #     events_sdf.event.user.alias("user"),
-        # )
-
-        # all_users_sdf = (
-        #     sdf.select(f.col("message_from").alias("user_id"))
-        #     .distinct()
-        #     .union(sdf.select(f.col("message_to").alias("user_id")).distinct())
-        #     .union(sdf.select(f.col("reaction_from").alias("user_id")).distinct())
-        #     .union(sdf.select(f.col("subscription_user").alias("user_id")).distinct())
-        #     .union(sdf.select(f.col("user").alias("user_id")).distinct())
-        #     .distinct()
-        # )
-        # all_contacts_sdf = (
-        #     all_users_sdf.crossJoin(
-        #         all_users_sdf.withColumnRenamed("user_id", "contact_id")
-        #     )
-        #     .where(f.col("user_id") != f.col("contact_id"))
-        #     .select("user_id", "contact_id")
-        #     .distinct()
-        # )
-
-        # all_contacts_sdf.show(100)
-
-        # print(all_contacts_sdf.count())
-
-        # * реальные контакты
+        # реальные контакты
         real_contacts_sdf = (
             events_sdf.where(events_sdf.event_type == "message")
             .where(events_sdf.event.message_to.isNotNull())
@@ -569,7 +550,7 @@ class SparkRunner:
             .repartitionByRange(92, "user_id", "contact_id")
         )
 
-        # * все пользователи подписавшиеся на оидн из каналов
+        #  все пользователи подписавшиеся на один из каналов (любой)
         subs_sdf = (
             events_sdf.where(events_sdf.event_type == "subscription")
             .where(events_sdf.event.subscription_channel.isNotNull())
@@ -581,7 +562,7 @@ class SparkRunner:
             .drop_duplicates(subset=["user_id", "subscription_channel"])
         )
 
-        # * пользователи подписанные на один и тот же канал
+        # пользователи подписанные на один и тот же канал
         subs_sdf = (
             subs_sdf.withColumnRenamed("user_id", "left_user")
             .join(
@@ -593,7 +574,7 @@ class SparkRunner:
             .repartitionByRange(92, "left_user", "right_user")
         )
 
-        # * убрать пользователей которые переписывались
+        #  убрать пользователей которые переписывались
         users_for_rec = subs_sdf.join(
             real_contacts_sdf,
             on=[
@@ -603,7 +584,7 @@ class SparkRunner:
             how="left_anti",
         )
 
-        # * все пользователи которые писали сообщения -> координаты последнего отправленого сообщения
+        # все пользователи которые писали сообщения -> координаты последнего отправленого сообщения
         messages_sdf = (
             events_sdf.where(events_sdf.event_type == "message")
             .where(events_sdf.event.message_from.isNotNull())
@@ -632,6 +613,7 @@ class SparkRunner:
             .repartitionByRange(92, "user_id")
         )
 
+        #  коорнинаты пользователей
         users_for_rec = (
             users_for_rec.join(
                 messages_sdf.select(
@@ -660,18 +642,20 @@ class SparkRunner:
         df = self._compute_distance(
             dataframe=users_for_rec, coord_cols_prefix=["left_user", "right_user"]
         )
-        users_info_sdf = self.spark.read.parquet(  # todo кажется тут идет что-то не так, потому что на выходе дублируеются user_id
-            "s3a://data-ice-lake-04/messager-data/tmp/users-info"
-        )
 
+        users_info_sdf = self._get_users_actual_data_dataframe(holder=holder)
+
+        # сборка итога
         df.where(df.distance <= 1).select("left_user", "right_user").distinct().join(
-            users_info_sdf.select("user_id", "city_id", "local_time"),
+            users_info_sdf.select("user_id", "act_city_id", "local_time").distinct(),
             on=[df.left_user == users_info_sdf.user_id],
             how="left",
-        ).select(
-            "left_user", "right_user", f.col("city_id").alias("zone_id"), "local_time"
-        ).show(
-            200
+        ).withColumn("processed_dttm", f.lit(str(dag_processed_dttm))).select(
+            "left_user",
+            "right_user",
+            "processed_dttm",
+            f.col("act_city_id").alias("zone_id"),
+            "local_time",
         )
 
 
@@ -684,14 +668,16 @@ def main() -> None:
     try:
         spark = SparkRunner()
         spark.init_session(app_name="testing-app", log4j_level="WARN")
-        spark.compute_friend_recomendation_datamart(holder=holder)
+        spark.compute_friend_recommendation_datamart(
+            holder=holder, dag_processed_dttm=datetime(2023, 5, 15)
+        )
 
     except (CapturedException, AnalysisException) as e:
         logger.exception(e)
         sys.exit(1)
 
-    # finally:
-    # spark.stop_session()
+    finally:
+        spark.stop_session()
 
 
 if __name__ == "__main__":
