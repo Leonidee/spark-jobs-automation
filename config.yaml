@@ -2,10 +2,32 @@ environ:
   IS_PROD: False
 
 logging:
-  level: DEBUG
+  python_log_level: DEBUG
+  log4j_level: WARN
 
 spark:
-  tags-job:
-    TAGS_VERIFIED_PATH: s3a://data-ice-lake-04/messager-data/snapshots/tags_verified/actual
-    SRC_PATH: s3a://data-ice-lake-04/messager-data/analytics/cleaned-events
-    TGT_PATH: s3a://data-ice-lake-04/messager-data/analytics/tag-candidates
+  application_name: DATAMART-COLLECTOR-APP
+
+  jobs:
+    tags:
+      TAGS_VERIFIED_PATH: s3a://data-ice-lake-04/messager-data/snapshots/tags_verified/actual
+      SRC_PATH: s3a://data-ice-lake-04/messager-data/analytics/cleaned-events
+      TGT_PATH: s3a://data-ice-lake-04/messager-data/analytics/tag-candidates
+    
+    users_info_datamart:
+      DATE: 2022-03-12
+      DEPTH: 10 
+      SRC_PATH: /user/master/data/snapshots/geo-events/
+      TGT_PATH: /user/prod/data/bi-hadoop/users-info-datamart
+
+    location_zone_agg_datamart:
+      DATE: 2022-03-12
+      DEPTH: 10 
+      SRC_PATH: /master/data/snapshots/geo-events/
+      TGT_PATH: /user/prod/data/bi-hadoop/location-zone-agg-datamart
+
+    friend_recommendation_datamart:
+      DATE: 2022-03-12
+      DEPTH: 10 
+      SRC_PATH: /master/data/snapshots/geo-events/
+      TGT_PATH: /user/prod/data/recommendations/friend-recommendation-datamart

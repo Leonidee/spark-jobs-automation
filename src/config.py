@@ -27,9 +27,29 @@ class Config:
         self._is_prod = None
 
     @property
-    def tags_job_config(self) -> dict:
-        return self.config["spark"]["tags-job"]
+    def tags_config(self) -> dict:
+        return self.config["spark"]["jobs"]["tags"]
 
     @property
-    def log_level(self) -> str:
-        return self.config["logging"]["level"]
+    def users_info_datamart_config(self) -> dict:
+        return self.config["spark"]["jobs"]["users_info_datamart"]
+
+    @property
+    def location_zone_agg_datamart_config(self) -> dict:
+        return self.config["spark"]["jobs"]["location_zone_agg_datamart"]
+
+    @property
+    def friend_recommendation_datamart_config(self) -> dict:
+        return self.config["spark"]["jobs"]["friend_recommendation_datamart"]
+
+    @property
+    def spark_application_name(self) -> str:
+        return self.config["spark"]["application_name"]
+
+    @property
+    def log4j_level(self) -> str:
+        return self.config["logging"]["log4j_level"]
+
+    @property
+    def python_log_level(self) -> str:
+        return self.config["logging"]["python_log_level"]

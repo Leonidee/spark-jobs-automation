@@ -18,7 +18,7 @@ load_environment()
 logger = (
     getLogger("aiflow.task")
     if config.IS_PROD
-    else SparkLogger(level=config.log_level).get_logger(
+    else SparkLogger(level=config.python_log_level).get_logger(
         logger_name=str(Path(Path(__file__).name))
     )
 )
@@ -40,6 +40,14 @@ class DataProcCluster:
         self.base_url = getenv("YC_DATAPROC_BASE_URL")
         self.token = self._get_iam_token()
 
+        self.logger = (
+            getLogger("aiflow.task")
+            if config.IS_PROD
+            else SparkLogger(level=config.python_log_level).get_logger(
+                logger_name=str(Path(Path(__file__).name))
+            )
+        )
+
     def _get_iam_token(self) -> str:
         """
         Get IAM token to be able to work with the API
@@ -49,10 +57,10 @@ class DataProcCluster:
         """
         OAUTH_TOKEN = getenv("YC_OAUTH_TOKEN")
 
-        logger.debug("Getting Yandex Cloud IAM token")
+        self.logger.debug("Getting Yandex Cloud IAM token")
 
         try:
-            logger.debug("Send request to API")
+            self.logger.debug("Send request to API")
             response = requests.post(
                 url="https://iam.api.cloud.yandex.net/iam/v1/tokens",
                 json={"yandexPassportOauthToken": OAUTH_TOKEN},
@@ -61,28 +69,28 @@ class DataProcCluster:
             response.raise_for_status()
 
             if response.status_code == 200:
-                logger.debug("Response received")
+                self.logger.debug("Response received")
                 response = response.json()
 
                 if "iamToken" in response.keys():
                     iam_token = response["iamToken"]
-                    logger.debug("IAM token collected!")
+                    self.logger.debug("IAM token collected!")
                 else:
-                    logger.error("There is no IAM token in API response!")
+                    self.logger.error("There is no IAM token in API response!")
                     sys.exit(1)
 
         except (HTTPError, ConnectionError, InvalidSchema, Timeout) as e:
-            logger.exception(e)
+            self.logger.exception(e)
             sys.exit(1)
 
         return iam_token
 
     def start(self) -> None:
         """Send request to start DataProc Cluster"""
-        logger.info("Starting Cluster")
+        self.logger.info("Starting Cluster")
 
         try:
-            logger.debug("Sending request to API")
+            self.logger.debug("Sending request to API")
             response = requests.post(
                 url=f"{self.base_url}/{self.cluster_id}:start",
                 headers={"Authorization": f"Bearer {self.token}"},
@@ -91,18 +99,18 @@ class DataProcCluster:
             response.raise_for_status()
 
             if response.status_code == 200:
-                logger.debug("Response received")
-                logger.debug(f"API response: {response.json()}")
+                self.logger.debug("Response received")
+                self.logger.debug(f"API response: {response.json()}")
 
         except (HTTPError, InvalidSchema, ConnectionError) as e:
-            logger.error(e)
+            self.logger.error(e)
             sys.exit(1)
 
     def stop(self) -> None:
         """Send request to stop DataProc Cluster"""
-        logger.info("Stopping Cluster")
+        self.logger.info("Stopping Cluster")
         try:
-            logger.debug("Sending request to API")
+            self.logger.debug("Sending request to API")
             response = requests.post(
                 url=f"{self.base_url}/{self.cluster_id}:stop",
                 headers={"Authorization": f"Bearer {self.token}"},
@@ -110,11 +118,11 @@ class DataProcCluster:
             response.raise_for_status()
 
             if response.status_code == 200:
-                logger.debug("Response received")
-                logger.debug(f"API response: {response.json()}")
+                self.logger.debug("Response received")
+                self.logger.debug(f"API response: {response.json()}")
 
         except (HTTPError, InvalidSchema, ConnectionError) as e:
-            logger.error(e)
+            self.logger.error(e)
             sys.exit(1)
 
     def is_running(self) -> None:
@@ -122,44 +130,44 @@ class DataProcCluster:
         Waits until cluster status will be `RUNNING`. \n
         If current attempt greater then `max_attempts_to_check_status` attribute will exit with 1 status code
         """
-        logger.info("Requesting Cluster status...")
+        self.logger.info("Requesting Cluster status...")
 
         is_active = False
         i = 1
 
         while not is_active:
             try:
-                logger.debug(f"Send request to API. Attempt: {i}")
+                self.logger.debug(f"Send request to API. Attempt: {i}")
                 response = requests.get(
                     url=f"{self.base_url}/{self.cluster_id}",
                     headers={"Authorization": f"Bearer {self.token}"},
                 )
                 response.raise_for_status()
             except (HTTPError, InvalidSchema, ConnectionError) as e:
-                logger.error(e)
+                self.logger.error(e)
                 sys.exit(1)
 
             if response.status_code == 200:
                 response = response.json()
-                logger.debug(f"API response: {response}")
+                self.logger.debug(f"API response: {response}")
 
-                logger.info(
+                self.logger.info(
                     f"Current cluster status is: {response.get('status', 'unknown')}"
                 )
 
                 if response["status"].strip().lower() == "running":
-                    logger.info("Cluster is ready!")
+                    self.logger.info("Cluster is ready!")
                     is_active = True
 
             if not is_active:
                 if i == self.max_attempts_to_check_status:
-                    logger.error(
+                    self.logger.error(
                         "No more attemts left to check Cluster status! Cluster status is unknown."
                     )
                     sys.exit(1)
 
                 sleep(20)
-                logger.debug("Another attempt to check status")
+                self.logger.debug("Another attempt to check status")
                 i += 1
 
     def is_stopped(self) -> None:
@@ -168,43 +176,43 @@ class DataProcCluster:
         If current attempt greater then `max_attempts_to_check_status` attribute will exit with 1 status code
         """
 
-        logger.info("Requesting Cluster status...")
+        self.logger.info("Requesting Cluster status...")
 
         is_stopped = False
         i = 1
 
         while not is_stopped:
             try:
-                logger.debug(f"Send request to API. Attempt: {i}")
+                self.logger.debug(f"Send request to API. Attempt: {i}")
                 response = requests.get(
                     url=f"{self.base_url}/{self.cluster_id}",
                     headers={"Authorization": f"Bearer {self.token}"},
                 )
                 response.raise_for_status()
             except (HTTPError, InvalidSchema, ConnectionError) as e:
-                logger.error(e)
+                self.logger.error(e)
                 sys.exit(1)
 
             if response.status_code == 200:
                 response = response.json()
-                logger.debug(f"API response: {response}")
+                self.logger.debug(f"API response: {response}")
 
-                logger.info(
+                self.logger.info(
                     f"Current cluster status is: {response.get('status', 'unknown')}"
                 )
 
                 if response["status"].strip().lower() == "stopped":
-                    logger.info("Cluster is stopped!")
+                    self.logger.info("Cluster is stopped!")
 
                     is_stopped = True
 
             if not is_stopped:
                 if i == self.max_attempts_to_check_status:
-                    logger.error(
+                    self.logger.error(
                         "No more attemts left to check Cluster status! Cluster status is unknown."
                     )
                     sys.exit(1)
 
                 sleep(20)
-                logger.debug("Another attempt to check status")
+                self.logger.debug("Another attempt to check status")
                 i += 1

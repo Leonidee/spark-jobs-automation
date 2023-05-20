@@ -252,8 +252,14 @@ class SparkRunner:
         """
         self.logger.debug(f"Getting input data from: {holder.src_path}")
 
-        src_paths = self._get_src_paths(holder=holder)
-        events_sdf = self.spark.read.parquet(*src_paths)
+        # todo uncomment this
+        # src_paths = self._get_src_paths(holder=holder)
+        # events_sdf = self.spark.read.parquet(*src_paths)
+
+        # todo delete thiw
+        events_sdf = self.spark.read.parquet(
+            "s3a://data-ice-lake-04/messager-data/tmp/step-two-01"
+        )
 
         self.logger.debug("Collecting dataframe")
         sdf = (
@@ -347,10 +353,47 @@ class SparkRunner:
             )
             .where(f.col("visit_flg") == 1)
             .groupby("user_id")
-            .agg(f.collect_list("city_name").alias("travel_array"))
-            .select(
-                "user_id", "travel_array", f.size("travel_array").alias("travel_count")
+            .agg(
+                f.collect_list("city_name").alias("travel_array"),
+                f.collect_list("msg_ts").alias("travel_ts_array"),
             )
+            .select(
+                "user_id",
+                "travel_array",
+                f.size("travel_array").alias("travel_count"),
+                "travel_ts_array",
+            )
+        )
+
+        home_city_sdf = (
+            travels_sdf.withColumn(
+                "zipped_array", f.arrays_zip("travel_array", "travel_ts_array")
+            )
+            .withColumn("upzipped_array", f.explode("zipped_array"))
+            .withColumn("travel_city", f.col("upzipped_array").getItem("travel_array"))
+            .withColumn("travel_ts", f.col("upzipped_array").getItem("travel_ts_array"))
+            .withColumn(
+                "prev_travel_ts",
+                f.lag("travel_ts").over(
+                    Window().partitionBy("user_id").orderBy(f.asc("travel_ts"))
+                ),
+            )
+            .withColumn(
+                "prev_travel_city",
+                f.lag("travel_city").over(
+                    Window().partitionBy("user_id").orderBy(f.asc("travel_ts"))
+                ),
+            )
+            .withColumn("diff", f.datediff("travel_ts", "prev_travel_ts"))
+            .where(f.col("diff") > 27)
+            .withColumn(
+                "rnk",
+                f.row_number().over(
+                    Window().partitionBy("user_id").orderBy(f.desc("travel_ts"))
+                ),
+            )
+            .where(f.col("rnk") == 1)
+            .select("user_id", f.col("prev_travel_city").alias("home_city"))
         )
 
         self.logger.debug("Collecting resulting dataframe")
@@ -358,7 +401,15 @@ class SparkRunner:
         sdf = (
             sdf.drop_duplicates(subset=["user_id"])
             .join(travels_sdf, how="left", on="user_id")
-            .select("user_id", "act_city", "local_time", "travel_count", "travel_array")
+            .join(home_city_sdf, how="left", on="user_id")
+            .select(
+                "user_id",
+                "act_city",
+                "home_city",
+                "local_time",
+                "travel_count",
+                "travel_array",
+            )
         )
 
         self.logger.info("Datamart collected")
@@ -373,9 +424,7 @@ class SparkRunner:
                 path=f"{holder.tgt_path}/date={processed_dt}",
                 mode="errorifexists",
             )
-            self.logger.info(
-                f"Done! Results -> {holder.tgt_path}/date={processed_dt}"
-            )
+            self.logger.info(f"Done! Results -> {holder.tgt_path}/date={processed_dt}")
         except Exception:
             self.logger.warning(
                 "Notice that target path is already exists and will be overwritten!"
@@ -385,9 +434,7 @@ class SparkRunner:
                 path=f"{holder.tgt_path}/date={processed_dt}",
                 mode="overwrite",
             )
-            self.logger.info(
-                f"Done! Results -> {holder.tgt_path}/date={processed_dt}"
-            )
+            self.logger.info(f"Done! Results -> {holder.tgt_path}/date={processed_dt}")
 
     def compute_location_zone_agg_datamart(self, holder: ArgsHolder) -> None:
         """Compute and save location zone aggregeted datamart
@@ -601,9 +648,7 @@ class SparkRunner:
                 path=f"{holder.tgt_path}/date={processed_dt}",
                 mode="errorifexists",
             )
-            self.logger.info(
-                f"Done! Results -> {holder.tgt_path}/date={processed_dt}"
-            )
+            self.logger.info(f"Done! Results -> {holder.tgt_path}/date={processed_dt}")
         except Exception:
             self.logger.warning(
                 "Notice that target path is already exists and will be overwritten!"
@@ -613,9 +658,7 @@ class SparkRunner:
                 path=f"{holder.tgt_path}/date={processed_dt}",
                 mode="overwrite",
             )
-            self.logger.info(
-                f"Done! Results -> {holder.tgt_path}/date={processed_dt}"
-            )
+            self.logger.info(f"Done! Results -> {holder.tgt_path}/date={processed_dt}")
 
     def compute_friend_recommendation_datamart(self, holder: ArgsHolder) -> None:
         """Compute and save friend recommendations datamart
@@ -768,15 +811,18 @@ class SparkRunner:
                 on=[sdf.left_user == users_info_sdf.user_id],
                 how="left",
             )
-            .withColumn("processed_dttm", f.lit(holder.processed_dttm.replace("T", " "))
+            .withColumn(
+                "processed_dttm", f.lit(holder.processed_dttm.replace("T", " "))
+            )
             .select(
                 "left_user",
                 "right_user",
                 "processed_dttm",
                 f.col("act_city_id").alias("zone_id"),
                 "local_time",
-            )
+            ),
         )
+
         self.logger.info("Datamart collected")
 
         self.logger.info("Writing results")
@@ -814,9 +860,7 @@ def main() -> None:
     try:
         spark = SparkRunner()
         spark.init_session(app_name="testing-app", log4j_level="INFO")
-        spark.compute_friend_recommendation_datamart(
-            holder=holder,
-        )
+        spark.compute_users_info_datamart(holder=holder)
 
     except (CapturedException, AnalysisException) as e:
         logger.exception(e)
