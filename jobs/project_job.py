@@ -191,7 +191,7 @@ class SparkRunner:
         self.logger.debug("Creating pyspark.sql.DataFrame")
         sdf = self.spark.createDataFrame(df, schema=schema)
 
-        return sdf
+        sdf.show()
 
     def _compute_distance(
         self, dataframe: DataFrame, coord_cols_prefix: List[str]

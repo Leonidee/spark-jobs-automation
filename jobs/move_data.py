@@ -32,7 +32,7 @@ def main() -> None:
     try:
         spark = SparkRunner()
         spark.init_session(app_name="testing-app", log4j_level="INFO")
-        spark.compute_users_info_datamart(holder=holder)
+        spark.test()
 
     except (CapturedException, AnalysisException) as e:
         logger.exception(e)

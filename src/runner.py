@@ -50,7 +50,7 @@ class SparkRunner:
     def __init__(self) -> None:
         """Main data processor class"""
         self.logger = SparkLogger(level=config.python_log_level).get_logger(
-            logger_name=str(Path(Path(__file__).name))
+            logger_name=__name__
         )
         self.validator = SparkArgsValidator()
 
@@ -59,12 +59,14 @@ class SparkRunner:
 
         self.logger.debug("Getting s3 connection instace")
 
-        return boto3.session.Session().client(
+        s3 = boto3.session.Session().client(
             service_name="s3",
             endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
         )
+        self.logger.debug(f"Boto3 instance: {s3}")
+        return s3
 
     def _get_src_paths(
         self,
@@ -443,16 +445,16 @@ class SparkRunner:
 
         return sdf
 
-    def compute_users_info_datamart(self, holder: ArgsHolder) -> None:
+    def collect_users_info_datamart(self, holder: ArgsHolder) -> None:
         """Collect users info datamart and save results on s3
 
         ## Parameters
-        `holder` : Argument holder object
+        `holder` : Arguments holder object
 
         ## Examples
         >>> spark = SparkRunner()
         >>> spark.init_session(app_name="testing-app", log4j_level="INFO")
-        >>> spark.compute_users_info_datamart(holder=holder) # saved results on s3
+        >>> spark.collect_users_info_datamart(holder=holder) # saved results on s3
         >>> sdf = spark.read.parquet(f"{holder.tgt_path}") # reading saved results
         >>> sdf.printSchema()
         root
@@ -465,19 +467,19 @@ class SparkRunner:
         |    |-- element: string (containsNull = false)
 
         >>> sdf.show()
-        +-------+-----------+---------+---------------+------------+--------------------+
-        |user_id|   act_city|home_city|     local_time|travel_count|        travel_array|
-        +-------+-----------+---------+---------------+------------+--------------------+
-        |     45|   Maitland|     null|2021-04-27 ... |           1|          [Maitland]|
-        |     54|     Darwin|     null|2022-04-25 ... |           1|            [Darwin]|
-        |    111| Gold Coast|     null|2021-04-25 ... |           1|        [Gold Coast]|
-        |    122|     Cairns|     null|2021-04-26 ... |           1|            [Cairns]|
+        +-------+-----------+--------------------+---------------+------------+--------------------+
+        |user_id|   act_city|     home_city      |  local_time   |travel_count|        travel_array|
+        +-------+-----------+--------------------+---------------+------------+--------------------+
+        |     45|   Maitland| Couldn't determine |2021-04-27 ... |           1|          [Maitland]|
+        |     54|     Darwin| Couldn't determine |2022-04-25 ... |           1|            [Darwin]|
+        |    111| Gold Coast| Couldn't determine |2021-04-25 ... |           1|        [Gold Coast]|
+        |    122|     Cairns| Couldn't determine |2021-04-26 ... |           1|            [Cairns]|
                                             ...
-        |    487|     Cairns|     null|2021-04-26 ... |           1|            [Cairns]|
-        |    610| Wollongong|     null|2021-04-26 ... |           1|        [Wollongong]|
-        |    611|    Bunbury|     null|2021-04-27 ... |           1|           [Bunbury]|
-        |    617|  Newcastle|     null|2021-04-26 ... |           1|         [Newcastle]|
-        +-------+-----------+---------+---------------+------------+--------------------+
+        |    487|     Cairns|      Maitland      |2021-04-26 ... |           1|            [Cairns]|
+        |    610| Wollongong| Couldn't determine |2021-04-26 ... |           1|        [Wollongong]|
+        |    611|    Bunbury| Couldn't determine |2021-04-27 ... |           1|           [Bunbury]|
+        |    617|  Newcastle| Couldn't determine |2021-04-26 ... |           1|         [Newcastle]|
+        +-------+-----------+--------------------+---------------+------------+--------------------+
         """
         self.logger.info("Starting collecting user info datamart")
 
@@ -562,9 +564,9 @@ class SparkRunner:
                 "travel_array",
             )
         )
-        sdf.printSchema()
+        sdf = sdf.fillna(value="Couldn't determine", subset="home_city")
 
-        sdf.show(40)
+        sdf.show(100)
 
         self.logger.info("Datamart collected")
         self.logger.info("Writing results")
@@ -590,6 +592,577 @@ class SparkRunner:
             )
             self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
 
+        job_end = datetime.now()
+        self.logger.info(f"Job execution time: {job_end - job_start}")
+
+    def collect_location_zone_agg_datamart(self, holder: ArgsHolder) -> None:
+        """Collect location zone aggregation datamart and save results on s3
+
+        ## Parameters
+        `holder` : Arguments holder object
+
+        ## Examples
+        >>> spark.init_session(app_name="testing-app", log4j_level="INFO")
+        >>> spark.collect_location_zone_agg_datamart(holder=holder) # saved results on s3
+        >>> sdf = spark.read.parquet(f"{holder.tgt_path}") # reading saved results
+        >>> sdf.printSchema()
+        root
+        |-- zone_id: integer (nullable = true)
+        |-- week: integer (nullable = true)
+        |-- month: integer (nullable = true)
+        |-- week_message: long (nullable = false)
+        |-- week_reaction: long (nullable = false)
+        |-- week_subscription: long (nullable = false)
+        |-- week_user: long (nullable = false)
+        |-- month_message: long (nullable = true)
+        |-- month_reaction: long (nullable = true)
+        |-- month_subscription: long (nullable = true)
+        |-- month_user: long (nullable = true)
+        >>> sdf.show()
+        +-------+----+-----+------------+-------------+-----------------+---------+-------------+--------------+------------------+----------+
+        |zone_id|week|month|week_message|week_reaction|week_subscription|week_user|month_message|month_reaction|month_subscription|month_user|
+        +-------+----+-----+------------+-------------+-----------------+---------+-------------+--------------+------------------+----------+
+        |      1|  17|    4|         176|         1823|             6627|       95|          317|          1823|              6627|       186|
+        |      2|  17|    4|         401|         2214|            10473|      176|          711|          2214|             10473|       302|
+        |      3|  17|    4|         376|         2377|            14518|      230|          684|          2377|             14518|       426|
+        |      4|  17|    4|         191|         1033|             7310|      100|          354|          1033|              7310|       198|
+        |      5|  17|    4|         109|          782|             5325|       73|          190|           782|              5325|       134|
+                                                                ...
+        |     19|  17|    4|         367|         2048|            10021|      165|          671|          2048|             10021|       288|
+        |     20|  17|    4|         177|          935|             6774|      101|          324|           935|              6774|       198|
+        |     21|  17|    4|         206|          738|             5377|       84|          368|           738|              5377|       153|
+        |     22|  17|    4|         144|          713|             5454|       85|          246|           713|              5454|       159|
+        |     23|  17|    4|         280|         1047|             7060|      126|          491|          1047|              7060|       229|
+        |     24|  17|    4|          96|          689|             3531|       59|          179|           689|              3531|       107|
+        +-------+----+-----+------------+-------------+-----------------+---------+-------------+--------------+------------------+----------+
+        """
+        self.logger.info("Staring collecting location zone aggregated datamart")
+        job_start = datetime.now()
+
+        self.logger.debug(f"Getting input data from: {holder.src_path}")
+
+        src_paths = self._get_src_paths(holder=holder)
+        events_sdf = self.spark.read.parquet(*src_paths)
+
+        self.logger.debug("Collecing messages dataframe. Processing...")
+
+        # сборка messages
+        messages_sdf = (
+            events_sdf.where(events_sdf.event_type == "message")
+            .where(events_sdf.event.message_from.isNotNull())
+            .select(
+                events_sdf.event.message_from.alias("user_id"),
+                events_sdf.event.message_id.alias("message_id"),
+                events_sdf.event.message_ts.alias("message_ts"),
+                events_sdf.event.datetime.alias("datetime"),
+                events_sdf.lat.alias("event_lat"),
+                events_sdf.lon.alias("event_lon"),
+            )
+            .withColumn(
+                "msg_ts",
+                f.when(f.col("message_ts").isNotNull(), f.col("message_ts")).otherwise(
+                    f.col("datetime")
+                ),
+            )
+            .drop_duplicates(subset=["user_id", "message_id", "msg_ts"])
+            .drop("datetime", "message_ts")
+        )
+        messages_sdf = self._get_event_location(
+            dataframe=messages_sdf, event_type="message"
+        )
+
+        messages_sdf = (
+            messages_sdf.withColumnRenamed("city_id", "zone_id")
+            .withColumn("week", f.weekofyear(f.col("msg_ts").cast("timestamp")))
+            .withColumn("month", f.month(f.col("msg_ts").cast("timestamp")))
+            .groupby("month", "week", "zone_id")
+            .agg(f.count("message_id").alias("week_message"))
+            .withColumn(
+                "month_message",
+                f.sum(f.col("week_message")).over(
+                    Window().partitionBy(f.col("zone_id"), f.col("month"))
+                ),
+            )
+        )
+
+        self.logger.debug("Collecing reacitons dataframe. Processing...")
+
+        # сборка reactions
+        reaction_sdf = (
+            events_sdf.where(events_sdf.event_type == "reaction")
+            .select(
+                events_sdf.event.datetime.alias("datetime"),
+                events_sdf.event.message_id.alias("message_id"),
+                events_sdf.event.reaction_from.alias("user_id"),
+                events_sdf.lat.alias("event_lat"),
+                events_sdf.lon.alias("event_lon"),
+            )
+            .drop_duplicates(subset=["user_id", "message_id", "datetime"])
+            .where(f.col("event_lat").isNotNull())
+        )
+        reaction_sdf = self._get_event_location(
+            dataframe=reaction_sdf, event_type="reaction"
+        )
+        reaction_sdf = (
+            reaction_sdf.withColumnRenamed("city_id", "zone_id")
+            .where(f.col("event_lat").isNotNull())
+            .withColumn("week", f.weekofyear(f.col("datetime").cast("timestamp")))
+            .withColumn("month", f.month(f.col("datetime").cast("timestamp")))
+            .groupby("month", "week", "zone_id")
+            .agg(f.count("message_id").alias("week_reaction"))
+            .withColumn(
+                "month_reaction",
+                f.sum(f.col("week_reaction")).over(
+                    Window().partitionBy(f.col("zone_id"), f.col("month"))
+                ),
+            )
+        )
+
+        self.logger.debug("Collecing registrations dataframe. Processing...")
+
+        # сборка registrations
+        registrations_sdf = (
+            events_sdf.where(events_sdf.event_type == "message")
+            .where(events_sdf.event.message_from.isNotNull())
+            .select(
+                events_sdf.event.message_from.alias("user_id"),
+                events_sdf.event.message_id.alias("message_id"),
+                events_sdf.event.message_ts.alias("message_ts"),
+                events_sdf.event.datetime.alias("datetime"),
+                events_sdf.lat.alias("event_lat"),
+                events_sdf.lon.alias("event_lon"),
+            )
+            .withColumn(
+                "msg_ts",
+                f.when(f.col("message_ts").isNotNull(), f.col("message_ts")).otherwise(
+                    f.col("datetime")
+                ),
+            )
+            .drop_duplicates(subset=["user_id", "message_id", "msg_ts"])
+            .drop("datetime", "message_ts")
+            .withColumn(
+                "registration_ts",
+                f.first(col="msg_ts", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(f.asc("msg_ts"))
+                ),
+            )
+            .withColumn(
+                "is_reg",
+                f.when(f.col("registration_ts") == f.col("msg_ts"), f.lit(1)).otherwise(
+                    f.lit(0)
+                ),
+            )
+            .where(f.col("is_reg") == f.lit(1))
+            .drop("is_reg", "registration_ts")
+        )
+        registrations_sdf = self._get_event_location(
+            dataframe=registrations_sdf, event_type="registration"
+        )
+
+        registrations_sdf = (
+            registrations_sdf.withColumnRenamed("city_id", "zone_id")
+            .where(f.col("event_lat").isNotNull())
+            .withColumn("week", f.weekofyear(f.col("msg_ts").cast("timestamp")))
+            .withColumn("month", f.month(f.col("msg_ts").cast("timestamp")))
+            .groupby("month", "week", "zone_id")
+            .agg(f.count("user_id").alias("week_user"))
+            .withColumn(
+                "month_user",
+                f.sum(f.col("week_user")).over(
+                    Window().partitionBy(f.col("zone_id"), f.col("month"))
+                ),
+            )
+        )
+
+        self.logger.debug("Collecing subscriptions dataframe. Processing...")
+
+        # сборка subscriptions
+        subscriptions_sdf = (
+            events_sdf.where(events_sdf.event_type == "subscription")
+            .select(
+                events_sdf.event.datetime.alias("datetime"),
+                events_sdf.event.subscription_channel.alias("subscription_channel"),
+                events_sdf.event.user.alias("user_id"),
+                events_sdf.lat.alias("event_lat"),
+                events_sdf.lon.alias("event_lon"),
+            )
+            .drop_duplicates(subset=["user_id", "subscription_channel", "datetime"])
+            .where(f.col("event_lat").isNotNull())
+        )
+
+        subscriptions_sdf = self._get_event_location(
+            dataframe=subscriptions_sdf, event_type="subscription"
+        )
+        subscriptions_sdf = (
+            subscriptions_sdf.withColumnRenamed("city_id", "zone_id")
+            .where(f.col("event_lat").isNotNull())
+            .withColumn("week", f.weekofyear(f.col("datetime").cast("timestamp")))
+            .withColumn("month", f.month(f.col("datetime").cast("timestamp")))
+            .groupby("month", "week", "zone_id")
+            .agg(f.count("user_id").alias("week_subscription"))
+            .withColumn(
+                "month_subscription",
+                f.sum(f.col("week_subscription")).over(
+                    Window().partitionBy(f.col("zone_id"), f.col("month"))
+                ),
+            )
+        )
+
+        self.logger.debug("Joining resulsts")
+
+        cols = ["zone_id", "week", "month"]
+        sdf = (
+            messages_sdf.join(other=reaction_sdf, on=cols)
+            .join(other=registrations_sdf, on=cols)
+            .join(other=subscriptions_sdf, on=cols)
+            .orderBy(cols)
+            .select(
+                "zone_id",
+                "week",
+                "month",
+                "week_message",
+                "week_reaction",
+                "week_subscription",
+                "week_user",
+                "month_message",
+                "month_reaction",
+                "month_subscription",
+                "month_user",
+            )
+        )
+        self.logger.info("Datamart collected")
+
+        self.logger.info("Writing results")
+
+        processed_dt = datetime.strptime(
+            holder.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
+        ).date()
+        OUTPUT_PATH = f"{holder.tgt_path}/date={processed_dt}"
+        try:
+            sdf.repartition(1).write.parquet(
+                path=OUTPUT_PATH,
+                mode="errorifexists",
+            )
+            self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
+        except Exception:
+            self.logger.warning(
+                "Notice that target path is already exists and will be overwritten!"
+            )
+            self.logger.info("Overwriting...")
+            sdf.repartition(1).write.parquet(
+                path=OUTPUT_PATH,
+                mode="overwrite",
+            )
+            self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
+
+        job_end = datetime.now()
+        self.logger.info(f"Job execution time: {job_end - job_start}")
+
+    def collect_friend_recommendation_datamart(self, holder: ArgsHolder) -> None:
+        """Collect friend recommendation datamart and save results on s3
+
+        ## Parameters
+        `holder` : Arguments holder object
+
+        ## Examples
+        >>> spark = SparkRunner()
+        >>> spark.init_session(app_name="testing-app", log4j_level="INFO")
+        >>> spark.collect_friend_recommendation_datamart(holder=holder) # saved results on s3
+        >>> sdf = spark.read.parquet(f"{holder.tgt_path}") # reading saved results
+        >>> sdf.printSchema()
+        root
+        |-- left_user: string (nullable = true)
+        |-- right_user: string (nullable = true)
+        |-- processed_dttm: string (nullable = true)
+        |-- zone_id: integer (nullable = true)
+        |-- local_time: timestamp (nullable = true)
+        """
+        self.logger.info("Starting collecting friend recommendations datamart")
+        job_start = datetime.now()
+
+        src_paths = self._get_src_paths(holder=holder)
+        events_sdf = self.spark.read.parquet(*src_paths)
+
+        self.logger.debug("Collecting dataframe with real contacts")
+
+        # реальные контакты
+        real_contacts_sdf = (
+            events_sdf.where(events_sdf.event_type == "message")
+            .where(events_sdf.event.message_to.isNotNull())
+            .select(
+                events_sdf.event.message_from.alias("message_from"),
+                events_sdf.event.message_to.alias("message_to"),
+            )
+            .withColumn(
+                "user_id",
+                f.explode(f.array(f.col("message_from"), f.col("message_to"))),
+            )
+            .withColumn(
+                "contact_id",
+                f.when(
+                    f.col("user_id") == f.col("message_from"), f.col("message_to")
+                ).otherwise(f.col("message_from")),
+            )
+            .select("user_id", "contact_id")
+            .distinct()
+            .repartitionByRange(92, "user_id", "contact_id")
+        )
+
+        self.logger.debug("Collecting all users with subscriptions dataframe")
+        #  все пользователи подписавшиеся на один из каналов (любой)
+        subs_sdf = (
+            events_sdf.where(events_sdf.event_type == "subscription")
+            .where(events_sdf.event.subscription_channel.isNotNull())
+            .where(events_sdf.event.user.isNotNull())
+            .select(
+                events_sdf.event.subscription_channel.alias("subscription_channel"),
+                events_sdf.event.user.alias("user_id"),
+            )
+            .drop_duplicates(subset=["user_id", "subscription_channel"])
+        )
+
+        self.logger.debug("Collecting users with same subsctiptions only dataframe")
+        # пользователи подписанные на один и тот же канал
+        subs_sdf = (
+            subs_sdf.withColumnRenamed("user_id", "left_user")
+            .join(
+                subs_sdf.withColumnRenamed("user_id", "right_user"),
+                on="subscription_channel",
+                how="cross",
+            )
+            .where(f.col("left_user") != f.col("right_user"))
+            .repartitionByRange(92, "left_user", "right_user")
+        )
+
+        self.logger.debug("Excluding real contacts")
+        #  убрать пользователей которые переписывались
+        users_for_rec = subs_sdf.join(
+            real_contacts_sdf,
+            on=[
+                subs_sdf.left_user == real_contacts_sdf.user_id,
+                subs_sdf.right_user == real_contacts_sdf.contact_id,
+            ],
+            how="left_anti",
+        )
+
+        self.logger.debug("Collecting last message coordinates dataframe")
+        # все пользователи которые писали сообщения -> координаты последнего отправленого сообщения
+        messages_sdf = (
+            events_sdf.where(events_sdf.event_type == "message")
+            .where(events_sdf.event.message_from.isNotNull())
+            .select(
+                events_sdf.event.message_from.alias("user_id"),
+                events_sdf.event.message_ts.alias("message_ts"),
+                events_sdf.event.datetime.alias("datetime"),
+                events_sdf.lat.alias("event_lat"),
+                events_sdf.lon.alias("event_lon"),
+            )
+            .withColumn(
+                "msg_ts",
+                f.when(f.col("message_ts").isNotNull(), f.col("message_ts")).otherwise(
+                    f.col("datetime")
+                ),
+            )
+            .withColumn(
+                "last_msg_ts",
+                f.first(col="msg_ts", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(f.asc("msg_ts"))
+                ),
+            )
+            .where(f.col("msg_ts") == f.col("last_msg_ts"))
+            .select("user_id", "event_lat", "event_lon")
+            .distinct()
+            .repartitionByRange(92, "user_id")
+        )
+
+        self.logger.debug("Collecting coordinates for potential recomendations users")
+        #  коорнинаты пользователей
+        users_for_rec = (
+            users_for_rec.join(
+                messages_sdf.select(
+                    f.col("user_id"),
+                    f.col("event_lat").alias("left_user_lat"),
+                    f.col("event_lon").alias("left_user_lon"),
+                ),
+                how="left",
+                on=[users_for_rec.left_user == messages_sdf.user_id],
+            )
+            .drop("user_id")
+            .join(
+                messages_sdf.select(
+                    f.col("user_id"),
+                    f.col("event_lat").alias("right_user_lat"),
+                    f.col("event_lon").alias("right_user_lon"),
+                ),
+                how="left",
+                on=[users_for_rec.right_user == messages_sdf.user_id],
+            )
+            .drop("user_id")
+            .where(f.col("left_user_lat").isNotNull())
+            .where(f.col("right_user_lat").isNotNull())
+        )
+
+        sdf = self._compute_distance(
+            dataframe=users_for_rec, coord_cols_prefix=["left_user", "right_user"]
+        )
+
+        users_info_sdf = self._get_users_actual_data_dataframe(holder=holder)
+
+        self.logger.debug("Collecting resulting dataframe")
+
+        # сборка итога
+        sdf = (
+            sdf.where(sdf.distance <= 1)
+            .select("left_user", "right_user")
+            .distinct()
+            .join(
+                users_info_sdf.select(
+                    "user_id", "act_city_id", "local_time"
+                ).distinct(),
+                on=[sdf.left_user == users_info_sdf.user_id],
+                how="left",
+            )
+            .withColumn(
+                "processed_dttm", f.lit(holder.processed_dttm.replace("T", " "))
+            )
+            .select(
+                "left_user",
+                "right_user",
+                "processed_dttm",
+                f.col("act_city_id").alias("zone_id"),
+                "local_time",
+            )
+        )
+
+        self.logger.info("Datamart collected")
+
+        self.logger.info("Writing results")
+
+        processed_dt = datetime.strptime(
+            holder.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
+        ).date()
+        OUTPUT_PATH = f"{holder.tgt_path}/date={processed_dt}"
+        try:
+            sdf.repartition(1).write.parquet(
+                path=OUTPUT_PATH,
+                mode="errorifexists",
+            )
+            self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
+        except Exception:
+            self.logger.warning(
+                "Notice that target path is already exists and will be overwritten!"
+            )
+            self.logger.info("Overwriting...")
+            sdf.repartition(1).write.parquet(
+                path=OUTPUT_PATH,
+                mode="overwrite",
+            )
+            self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
+
+        job_end = datetime.now()
+        self.logger.info(f"Job execution time: {job_end - job_start}")
+
+    def test(self):
+        from datetime import date
+
+        job_start = datetime.now()
+
+        # start_date = date(2022, 1, 1)
+        # end_date = date(2022, 1, 31)
+        # delta = timedelta(days=1)
+        # dates = []
+        # while start_date <= end_date:
+        #     dates.append(start_date)
+        #     start_date += delta
+        # from functools import reduce
+
+        # dataframes = []
+        # for dt in dates:
+        #     self.logger.info(f"Provessing {dt}")
+        #     sdf = self.spark.read.parquet(
+        #         f"s3a://data-ice-lake-04/messager-data/analytics/geo-events/date=2022-01-01"
+        #     )
+        #     self.logger.info(f"Dataframe for {dt} date collected")
+
+        #     dataframes.append(sdf)
+
+        # self.logger.info(f"Reducing")
+        # df = reduce(DataFrame.unionByName, dataframes)
+        # self.logger.info("Done. Collecting...")
+
+        df = (
+            self.spark.read.option("mergeSchema", "true")
+            .option("cacheMetadata", "true")
+            # .option("enableVectorizedReader", "true")
+            # .option("useDataSourceApi", "true")
+            .option("inMemoryColumnarStorage.compressed", "true")
+            .parquet("s3a://data-ice-lake-04/messager-data/analytics/geo-events")
+        )
+        df = (
+            df.withColumn("admins", df.event.admins)
+            .withColumn("channel_id", df.event.channel_id)
+            .withColumn(
+                "datetime",
+                f.to_timestamp(col=df.event.datetime, format="yyyy-MM-dd HH:mm:ss"),
+            )
+            .withColumn("media_type", df.event.media.media_type)
+            .withColumn("media_src", df.event.media.src)
+            .withColumn("message", df.event.message)
+            .withColumn("message_channel_to", df.event.message_channel_to)
+            .withColumn("message_from", df.event.message_from)
+            .withColumn("message_group", df.event.message_group)
+            .withColumn("message_id", df.event.message_id)
+            .withColumn("message_to", df.event.message_to)
+            .withColumn(
+                "message_ts",
+                f.to_timestamp(
+                    f.split(str=df.event.message_ts, pattern="\.").getItem(0),
+                    format="yyyy-MM-dd HH:mm:ss",
+                ),
+            )
+            .withColumn("reaction_from", df.event.reaction_from)
+            .withColumn("reaction_type", df.event.reaction_type)
+            .withColumn("subscription_channel", df.event.subscription_channel)
+            .withColumn("subscription_user", df.event.subscription_user)
+            .withColumn("tags", df.event.tags)
+            .withColumn("user", df.event.user)
+            .withColumn("event_type", df.event_type)
+            .withColumn("date", f.date_format("datetime", "yyyy-MM-dd"))
+            .withColumn("lat", df.lat)
+            .withColumn("lon", df.lon)
+            .select(
+                "admins",
+                "channel_id",
+                "datetime",
+                "media_type",
+                "media_src",
+                "message",
+                "message_channel_to",
+                "message_from",
+                "message_group",
+                "message_id",
+                "message_to",
+                "message_ts",
+                "reaction_from",
+                "reaction_type",
+                "subscription_channel",
+                "subscription_user",
+                "tags",
+                "user",
+                "event_type",
+                "lat",
+                "lon",
+                "date",
+            )
+        )
+        self.logger.info("Writing cleaned dataset to s3.")
+        tgt_path = "s3a://data-ice-lake-05/messager-data/analytics/geo-events"
+        df.write.parquet(
+            path=tgt_path,
+            mode="overwrite",
+            partitionBy=["event_type", "date"],
+            compression="gzip",
+        )
         job_end = datetime.now()
         self.logger.info(f"Job execution time: {job_end - job_start}")
 
@@ -658,78 +1231,3 @@ class SparkRunner:
                 compression="gzip",
             )
             self.logger.info("Done")
-
-    def prepare_dataset(self, src_path: str, tgt_path: str):
-        self.logger.info("Starting dataset preperation")
-
-        self.logger.info("Reading raw data from s3")
-        df = self.spark.read.json(src_path)
-
-        self.logger.info("Cleaning dataset")
-        df = (
-            df.withColumn("admins", df.event.admins)
-            .withColumn("channel_id", df.event.channel_id)
-            .withColumn(
-                "datetime",
-                to_timestamp(col=df.event.datetime, format="yyyy-MM-dd HH:mm:ss"),
-            )
-            .withColumn("media_type", df.event.media.media_type)
-            .withColumn("media_src", df.event.media.src)
-            .withColumn("message", df.event.message)
-            .withColumn("message_channel_to", df.event.message_channel_to)
-            .withColumn("message_from", df.event.message_from)
-            .withColumn("message_group", df.event.message_group)
-            .withColumn("message_id", df.event.message_id)
-            .withColumn("message_to", df.event.message_to)
-            .withColumn(
-                "message_ts",
-                to_timestamp(
-                    split(str=df.event.message_ts, pattern="\.").getItem(0),
-                    format="yyyy-MM-dd HH:mm:ss",
-                ),
-            )
-            .withColumn("reaction_from", df.event.reaction_from)
-            .withColumn("reaction_type", df.event.reaction_type)
-            .withColumn("subscription_channel", df.event.subscription_channel)
-            .withColumn("subscription_user", df.event.subscription_user)
-            .withColumn("tags", df.event.tags)
-            .withColumn("user", df.event.user)
-            .withColumn("event_type", df.event_type)
-            .withColumn("date", df.date)
-            .withColumn("lat", df.lat)
-            .withColumn("lon", df.lon)
-            .select(
-                "admins",
-                "channel_id",
-                "datetime",
-                "media_type",
-                "media_src",
-                "message",
-                "message_channel_to",
-                "message_from",
-                "message_group",
-                "message_id",
-                "message_to",
-                "message_ts",
-                "reaction_from",
-                "reaction_type",
-                "subscription_channel",
-                "subscription_user",
-                "tags",
-                "user",
-                "event_type",
-                "lat",
-                "lon",
-                "date",
-            )
-        )
-        self.logger.info(f"Done. Rows in dataset: {df.count()}")
-
-        self.logger.info("Writing cleaned dataset to s3.")
-        df.write.parquet(
-            path=tgt_path,
-            mode="overwrite",
-            partitionBy=["event_type", "date"],
-            compression="gzip",
-        )
-        self.logger.info("Done")
