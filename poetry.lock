@@ -753,7 +753,7 @@ files = [
 name = "numpy"
 version = "1.24.3"
 description = "Fundamental package for array computing in Python"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.8"
 files = [
@@ -803,7 +803,7 @@ files = [
 name = "pandas"
 version = "2.0.1"
 description = "Powerful data structures for data analysis, time series, and statistics"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.8"
 files = [
@@ -1230,7 +1230,7 @@ cli = ["click (>=5.0)"]
 name = "pytz"
 version = "2023.3"
 description = "World timezone definitions, modern and historical"
-category = "dev"
+category = "main"
 optional = false
 python-versions = "*"
 files = [
@@ -1570,7 +1570,7 @@ files = [
 name = "tzdata"
 version = "2023.3"
 description = "Provider of IANA time zone data"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=2"
 files = [
@@ -1812,4 +1812,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "525aeb02c6e45a66f903632f17b57d2460edc597ea49cca0db4872c943364ef4"
+content-hash = "4e8413e01696fd614301a9092eaf28b298b30b01e08bfd9fd8d0da279596f197"

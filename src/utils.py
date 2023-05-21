@@ -11,23 +11,20 @@ logger = SparkLogger().get_logger(logger_name=str(Path(Path(__file__).name)))
 
 
 class TagsJobArgsHolder(BaseModel):
-    """Holds `tags-job` Spark job arguments \n
-
-    ## Arguments:
-        `date` (str): Report start date. Format: YYYY-MM-DD\n
-        `depth` (str): Report lenght in days. Report start date minus depth\n
-        `threshold` (str): Users threshold\n
-        `tags_verified_path` (str): s3 path with  tags_verified dataset. Tags from this dataset will be exluded from result\n
-        `src_path` (str): s3 path with source dataset partitions\n
-        `tgt_path` (str): s3 path where Spark will store the results
-    """
-
     date: str
     depth: int
     threshold: int
     tags_verified_path: str
     src_path: str
     tgt_path: str
+
+
+class ArgsHolder(BaseModel):
+    date: str
+    depth: int
+    src_path: str
+    tgt_path: str
+    processed_dttm: str
 
 
 def load_environment(dotenv_file_name: str = ".env") -> None:
