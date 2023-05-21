@@ -3,12 +3,15 @@ import sys
 from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, List, Literal
 
 import boto3
 import findspark
 from botocore.exceptions import ClientError
 
+# package
+sys.path.append(str(Path(__file__).parent.parent))
+from src.config import Config
 from src.logger import SparkLogger
 from src.utils import SparkArgsValidator, TagsJobArgsHolder, load_environment
 
@@ -21,7 +24,7 @@ os.environ["PYTHONPATH"] = "/opt/conda/bin/python3"
 findspark.init()
 findspark.find()
 
-from pyspark.sql import SparkSession
+from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql.functions import (
     col,
     count_distinct,
@@ -30,14 +33,24 @@ from pyspark.sql.functions import (
     to_timestamp,
     trim,
 )
+from pyspark.sql.types import (
+    FloatType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 
 load_environment()
+
+config = Config()
 
 
 class SparkRunner:
     def __init__(self) -> None:
         """Main data processor class"""
-        self.logger = SparkLogger().get_logger(
+        self.logger = SparkLogger(level=config.python_log_level).get_logger(
             logger_name=str(Path(Path(__file__).name))
         )
         self.validator = SparkArgsValidator()
@@ -45,37 +58,48 @@ class SparkRunner:
     def _get_s3_instance(self):
         "Get boto3 S3 connection instance"
 
-        self.logger.info("Getting s3 connection instace")
+        self.logger.debug("Getting s3 connection instace")
 
-        s3 = boto3.session.Session().client(
+        return boto3.session.Session().client(
             service_name="s3",
             endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
         )
 
-        return s3
-
     def _get_src_paths(
         self,
         event_type: Literal["message", "reaction", "subscription"],
-        holder: Any,
-    ) -> deque:
-        """Get S3 paths contains dataset partitions
+        holder: TagsJobArgsHolder,
+    ) -> List[str]:
+        """Get S3 paths contains dataset partitions.
 
         Collects paths corresponding to the passed in `holder` object arguments and checks if each path exists on S3. Collects only existing paths.
-        If no paths for given arguments raise `SystemExit` with 1 code
 
-        Args:
-            event_type (Literal[message, reaction, subscription]): Event type for partition
-            holder (Any): `pydantic.BaseModel` like object with Spark Job arguments
+        ## Parameters
+        `event_type` : Event type for partition
+        `holder` : Dataclass-like object with Spark Job arguments
 
-        Returns:
-            collections.deque[str]: Queue of S3 path
+        ## Returns
+        `List[str]` : List with existing partition paths on s3
+
+        ## Reises
+        If no paths for given arguments kill process
+
+        ## Examples
+        >>> holder = TagsJobArgsHolder(date="2022-03-12", depth=10, ..., src_path="s3a://data-ice-lake-04/messager-data/analytics/cleaned-events")
+        >>> src_paths = self._get_src_paths(event_type="message", holder=holder)
+        >>> print(len(src_paths))
+        4 # only 4 paths exists on s3
+        >>> for _ in src_paths: print(_)
+        "s3a://data-ice-lake-04/messager-data/analytics/cleaned-events/event_type=message/date=2022-03-12"
+        "s3a://data-ice-lake-04/messager-data/analytics/cleaned-events/event_type=message/date=2022-03-11"
+        "s3a://data-ice-lake-04/messager-data/analytics/cleaned-events/event_type=message/date=2022-03-10"
+        "s3a://data-ice-lake-04/messager-data/analytics/cleaned-events/event_type=message/date=2022-03-09"
         """
         s3 = self._get_s3_instance()
 
-        self.logger.info("Collecting src paths")
+        self.logger.debug("Collecting src paths")
 
         date = datetime.strptime(holder.date, "%Y-%m-%d").date()
 
@@ -85,9 +109,9 @@ class SparkRunner:
             for i in range(int(holder.depth))
         ]
 
-        self.logger.info("Checking if each path exists on s3")
+        self.logger.debug("Checking if each path exists on s3")
 
-        existing_paths = deque()
+        existing_paths = []
         for path in paths:
             try:
                 response = s3.list_objects(
@@ -103,25 +127,44 @@ class SparkRunner:
                 self.logger.exception(e)
                 sys.exit(1)
 
-        # if returns empty queue - exit
-        if existing_paths == deque():
+        # if returns empty list - exit
+        if existing_paths == []:
             self.logger.error("There is no data for given arguments!")
             sys.exit(1)
 
-        self.logger.info(f"Done with {len(existing_paths)} paths in total")
+        self.logger.debug(f"Done with {len(existing_paths)} paths in total")
 
         return existing_paths
 
-    def _init_session(self, app_name: str) -> None:
+    def init_session(
+        self,
+        app_name: str,
+        log4j_level: Literal[
+            "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
+        ] = "WARN",
+    ) -> None:
         """Configure and initialize Spark Session
 
-        Args:
-            app_name (str): Name of Spark Application
+        ## Parameters
+        `app_name` : Name of Spark application
+        `log4j_level` : Spark Context Java logging level, by default "WARN"
         """
+
         self.logger.info("Initializing Spark Session")
 
-        self.spark = SparkSession.builder.master("yarn").appName(app_name).getOrCreate()
-        self.spark.sparkContext.setLogLevel("WARN")
+        self.spark = (
+            SparkSession.builder\
+            .master("yarn")\
+            .config("spark.hadoop.fs.s3a.access.key", os.getenv("AWS_ACCESS_KEY_ID")) \
+            .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY")) \
+            .config("spark.hadoop.fs.s3a.endpoint", os.getenv("AWS_ENDPOINT_URL")) \
+            .config('spark.hadoop.fs.s3a.impl', "org.apache.hadoop.fs.s3a.S3AFileSystem")\
+            .appName(app_name)\
+            .getOrCreate()
+
+        self.spark.sparkContext.setLogLevel(log4j_level)
+
+        self.logger.info(f"Log4j level set to: {log4j_level}")
 
     def stop_session(self) -> None:
         """Stop active Spark Session"""
@@ -133,11 +176,6 @@ class SparkRunner:
         self,
         holder: TagsJobArgsHolder,
     ) -> None:
-        """Run `tags-job`
-
-        Args:
-            holder (TagsJobArgsHolder): `TagsJobArgsHolder` with Spark Job arguments
-        """
         try:
             self.validator.validate_tags_job_args(holder=holder)
         except AssertionError as e:
@@ -146,7 +184,6 @@ class SparkRunner:
 
         src_paths = self._get_src_paths(event_type="message", holder=holder)
 
-        self._init_session(app_name="TAGS-APP")
 
         self.logger.info(f"Starting `tags` job")
 
@@ -201,6 +238,13 @@ class SparkRunner:
                 compression="gzip",
             )
             self.logger.info("Done")
+
+
+    def move_data(self, src_path: str, tgt_path: str) -> None:
+        df = self.spark.read.parquet(src_path, compression="gzip")
+
+        df.repartition(1).write.parquet(tgt_path, mode="overwrite", compression="gzip")
+        
 
     def prepare_dataset(self, src_path: str, tgt_path: str):
         self.logger.info("Starting dataset preperation")

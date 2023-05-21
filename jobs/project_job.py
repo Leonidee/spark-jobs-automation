@@ -2,12 +2,11 @@ import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal, List, Union
-from pandas import read_csv
+from typing import Any, List, Literal, Union
 
-from pydantic import BaseModel
 import findspark
-
+from pandas import read_csv
+from pydantic import BaseModel
 
 os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
 os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
@@ -18,27 +17,25 @@ os.environ["PYTHONPATH"] = "/opt/conda/bin/python3"
 findspark.init()
 findspark.find()
 
-# spark
-from pyspark.sql import SparkSession, Window, DataFrame
-from pyspark.sql.utils import (
-    CapturedException,
-    AnalysisException,
-)
 import pyspark.sql.functions as f
+
+# spark
+from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql.types import (
-    StructField,
-    StructType,
+    FloatType,
     IntegerType,
     StringType,
-    FloatType,
+    StructField,
+    StructType,
     TimestampType,
 )
+from pyspark.sql.utils import AnalysisException, CapturedException
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
+from src.config import Config
 from src.logger import SparkLogger
 from src.utils import load_environment
-from src.config import Config
 
 load_environment()
 
@@ -47,6 +44,9 @@ config = Config()
 logger = SparkLogger(level=config.log_level).get_logger(
     logger_name=str(Path(Path(__file__).name))
 )
+import pandas as pd
+
+pd.DataFrame()
 
 
 class ArgsHolder(BaseModel):
@@ -55,6 +55,51 @@ class ArgsHolder(BaseModel):
     src_path: str
     tgt_path: str
     processed_dttm: str
+
+
+def t(d: str, b: BaseModel) -> dict:
+    """Summary now too long and not too short
+
+    Parameters
+    ----------
+    d
+        Some text here
+    b
+        Another desctiprion
+
+    Returns
+    -------
+        dict with bla-bla-bla
+
+    Raises
+    ------
+    AnalysisException
+        Some ezeprion
+    """
+    ...
+
+
+def new_test(logger_name: str, model: BaseModel, level: str = "INFO") -> pd.DataFrame:
+    """_summary_
+
+    ## Parameters
+    logger_name : _description_
+    model : _description_
+    level : _description_, by default "INFO"
+
+    ## Returns
+    `pd.DataFrame` : _description_
+
+    ## Raises
+    `AnalysisException` : _description_
+    """
+
+    df = pd.DataFrame(data={"a": [1, 2, 5, 6]})
+    print(level)
+
+    if not model:
+        raise AnalysisException(logger_name)
+    return df
 
 
 class SparkRunner:

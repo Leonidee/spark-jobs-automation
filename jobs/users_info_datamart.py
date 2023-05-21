@@ -1,18 +1,15 @@
 import sys
-from pathlib import Path
 from logging import getLogger
+from pathlib import Path
 
-from pyspark.sql.utils import (
-    CapturedException,
-    AnalysisException,
-)
+from pyspark.sql.utils import AnalysisException, CapturedException
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
+from scripts.config import Config
 from scripts.logger import SparkLogger
 from scripts.runner import SparkRunner
 from scripts.utils import ArgsHolder
-from scripts.config import Config
 
 config = Config()
 

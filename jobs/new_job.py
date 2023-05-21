@@ -2,13 +2,12 @@ import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal, List
+from typing import Any, List, Literal
 
-from pydantic import BaseModel
 import boto3
 import findspark
 from botocore.exceptions import ClientError
-
+from pydantic import BaseModel
 
 os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
 os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
@@ -20,33 +19,33 @@ findspark.init()
 findspark.find()
 
 from pyspark.sql import SparkSession, Window
-from pyspark.sql.utils import (
-    CapturedException,
-    AnalysisException,
-)  # todo add this exeptions to first tags job
 from pyspark.sql.functions import (
+    array,
+    asc,
     col,
+    count,
     count_distinct,
+    desc,
     explode,
+    first,
+    rank,
+    regexp_replace,
+    row_number,
     split,
     to_timestamp,
     trim,
-    count,
-    desc,
-    asc,
-    rank,
-    row_number,
     when,
-    regexp_replace,
-    first,
-    array,
+)
+from pyspark.sql.utils import (  # todo add this exeptions to first tags job
+    AnalysisException,
+    CapturedException,
 )
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
+from src.config import Config
 from src.logger import SparkLogger
 from src.utils import load_environment
-from src.config import Config
 
 load_environment()
 
