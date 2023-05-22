@@ -76,6 +76,8 @@ class SparkRunner:
 
         Collects paths corresponding to the passed in `holder` object arguments and checks if each path exists on S3. Collects only existing paths.
 
+        If no paths for given arguments kill process.
+
         ## Parameters
         `event_type` : Event type for partition
         `holder` : Dataclass-like object with Spark Job arguments
@@ -83,18 +85,17 @@ class SparkRunner:
         ## Returns
         `List[str]` : List with existing partition paths on s3
 
-        ## Reises
-        If no paths for given arguments kill process
-
         ## Examples
         >>> holder = ArgsHolder(date="2022-03-12", depth=10, ..., src_path="s3a://data-ice-lake-04/messager-data/analytics/geo-events")
         >>> src_paths = self._get_src_paths(holder=holder)
         >>> print(len(src_paths))
         4 # only 4 paths exists on s3
-        >>> for _ in src_paths: print(_)
+        >>> print(type(src_paths))
+        <class 'list'>
+        >>> for _ in src_paths: print(_) # how it looks
         "s3a://data-ice-lake-04/messager-data/analytics/geo-events/date=2022-03-12"
-        "s3a://data-ice-lake-04/messager-data/analytics/geo-events/date=2022-03-11"
         ...
+        "s3a://data-ice-lake-04/messager-data/analytics/geo-events/date=2022-03-11"
         """
         s3 = self._get_s3_instance()
 
@@ -160,6 +161,10 @@ class SparkRunner:
             .config(
                 "spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem"
             )
+            .config("spark.executor.memory", "1300m")
+            .config("spark.executor.cores", "1")
+            # .config("spark.executor.instances", "12")
+            .config("spark.dynamicAllocation.maxExecutors", "12")
             .appName(app_name)
             .getOrCreate()
         )
@@ -1062,9 +1067,7 @@ class SparkRunner:
         job_end = datetime.now()
         self.logger.info(f"Job execution time: {job_end - job_start}")
 
-    def test(self):
-        from datetime import date
-
+    def move_data(self):
         job_start = datetime.now()
 
         # start_date = date(2022, 1, 1)
@@ -1093,11 +1096,15 @@ class SparkRunner:
         df = (
             self.spark.read.option("mergeSchema", "true")
             .option("cacheMetadata", "true")
+            .parquet("s3a://data-ice-lake-04/messager-data/analytics/geo-events")
+            # .read.option("mergeSchema", "true")
+            # .option("cacheMetadata", "true")
             # .option("enableVectorizedReader", "true")
             # .option("useDataSourceApi", "true")
-            .option("inMemoryColumnarStorage.compressed", "true")
-            .parquet("s3a://data-ice-lake-04/messager-data/analytics/geo-events")
+            # .option("inMemoryColumnarStorage.compressed", "true")
         )
+        df = df.repartition(12)
+
         df = (
             df.withColumn("admins", df.event.admins)
             .withColumn("channel_id", df.event.channel_id)
@@ -1155,9 +1162,10 @@ class SparkRunner:
                 "date",
             )
         )
+        # df = df.repartition(1)
         self.logger.info("Writing cleaned dataset to s3.")
         tgt_path = "s3a://data-ice-lake-05/messager-data/analytics/geo-events"
-        df.write.parquet(
+        df.repartition(1).write.parquet(
             path=tgt_path,
             mode="overwrite",
             partitionBy=["event_type", "date"],

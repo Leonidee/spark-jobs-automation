@@ -31,8 +31,8 @@ def main() -> None:
     )
     try:
         spark = SparkRunner()
-        spark.init_session(app_name="testing-app", log4j_level="INFO")
-        spark.test()
+        spark.init_session(app_name="data-mover-app", log4j_level="INFO")
+        spark.move_data()
 
     except (CapturedException, AnalysisException) as e:
         logger.exception(e)

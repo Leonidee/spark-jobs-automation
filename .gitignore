@@ -6,3 +6,4 @@ plugins
 .pytest_cache
 .DS_Store
 *.pem
+.vscode
