@@ -19,7 +19,12 @@ class TagsJobArgsHolder(BaseModel):
     tgt_path: str
 
 
-class ArgsHolder(BaseModel):
+class SparkConfigKeeper(BaseModel):  # todo use it
+    "Dataclass for keeping Spark configuration parameters"
+    ...
+
+
+class ArgsHolder(BaseModel):  # ? rename to ArgsKeeper
     date: str
     depth: int
     src_path: str

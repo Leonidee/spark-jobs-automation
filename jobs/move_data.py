@@ -32,7 +32,7 @@ def main() -> None:
     try:
         spark = SparkRunner()
         spark.init_session(app_name="data-mover-app", log4j_level="INFO")
-        spark.move_data()
+        spark.testing()
 
     except (CapturedException, AnalysisException) as e:
         logger.exception(e)

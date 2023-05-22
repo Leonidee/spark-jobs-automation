@@ -47,8 +47,24 @@ config = Config()
 
 
 class SparkRunner:
+    """Data processor and datamarts collector class
+
+    ## Usage
+    >>> holder = ArgsHolder(
+    ...     date="2022-04-26",
+    ...     depth=2,
+    ...     src_path="s3a://data-ice-lake-05/messager-data/analytics/geo-events",
+    ...     tgt_path="s3a://data-ice-lake-05/messager-data/analytics/prod/friend_recommendation_datamart",
+    ...     processed_dttm=str(datetime.now()),
+    ...     )
+    >>> spark = SparkRunner() # initialize class
+    >>> spark.init_session(app_name="data-collector-app", log4j_level="INFO") # start session
+    >>> spark.collect_friend_recommendation_datamart(holder=holder) # execute job
+    >>> spark.stop_session() # stop session
+
+    """
+
     def __init__(self) -> None:
-        """Main data processor class"""
         self.logger = SparkLogger(level=config.python_log_level).get_logger(
             logger_name=__name__
         )
@@ -164,7 +180,7 @@ class SparkRunner:
             .config("spark.executor.memory", "1300m")
             .config("spark.executor.cores", "1")
             # .config("spark.executor.instances", "12")
-            .config("spark.dynamicAllocation.maxExecutors", "12")
+            .config("spark.dynamicAllocation.maxExecutors", "28")
             .appName(app_name)
             .getOrCreate()
         )
@@ -1103,7 +1119,7 @@ class SparkRunner:
             # .option("useDataSourceApi", "true")
             # .option("inMemoryColumnarStorage.compressed", "true")
         )
-        df = df.repartition(12)
+        df = df.repartition(56)
 
         df = (
             df.withColumn("admins", df.event.admins)
@@ -1162,10 +1178,11 @@ class SparkRunner:
                 "date",
             )
         )
-        # df = df.repartition(1)
+        df = df.repartition(1)
+
         self.logger.info("Writing cleaned dataset to s3.")
         tgt_path = "s3a://data-ice-lake-05/messager-data/analytics/geo-events"
-        df.repartition(1).write.parquet(
+        df.write.parquet(
             path=tgt_path,
             mode="overwrite",
             partitionBy=["event_type", "date"],
@@ -1173,6 +1190,14 @@ class SparkRunner:
         )
         job_end = datetime.now()
         self.logger.info(f"Job execution time: {job_end - job_start}")
+
+    def testing(self) -> None:
+        df = self.spark.read.parquet(
+            "s3a://data-ice-lake-05/messager-data/analytics/geo-events"
+        ).where("date > '2022-01-15' and date < '2022-02-15'")
+
+        df.show(200)
+        df.printSchema()
 
     def run_tags_job(
         self,
