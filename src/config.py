@@ -31,19 +31,19 @@ class Config:
         return self.config["spark"]["jobs"]["tags"]
 
     @property
-    def users_info_datamart_config(self) -> dict:
+    def get_users_info_datamart_config(self) -> dict:
         return self.config["spark"]["jobs"]["users_info_datamart"]
 
     @property
-    def location_zone_agg_datamart_config(self) -> dict:
+    def get_location_zone_agg_datamart_config(self) -> dict:
         return self.config["spark"]["jobs"]["location_zone_agg_datamart"]
 
     @property
-    def friend_recommendation_datamart_config(self) -> dict:
+    def get_friend_recommendation_datamart_config(self) -> dict:
         return self.config["spark"]["jobs"]["friend_recommendation_datamart"]
 
     @property
-    def spark_application_name(self) -> str:
+    def get_spark_application_name(self) -> str:
         return self.config["spark"]["application_name"]
 
     @property

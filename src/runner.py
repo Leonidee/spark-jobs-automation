@@ -14,10 +14,10 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config
 from src.logger import SparkLogger
 from src.utils import (
-    SparkArgsValidator,
-    TagsJobArgsHolder,
-    load_environment,
-    ArgsHolder,
+    # SparkArgsValidator,
+    EnvironManager,
+    ArgsKeeper,
+    SparkConfigKeeper,
 )
 
 os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
@@ -31,26 +31,14 @@ findspark.find()
 
 from pyspark.sql import DataFrame, SparkSession, Window
 import pyspark.sql.functions as f
-from pyspark.sql.types import (
-    FloatType,
-    IntegerType,
-    StringType,
-    StructField,
-    StructType,
-    TimestampType,
-)
 from pyspark.sql.utils import AnalysisException
-
-load_environment()
-
-config = Config()
 
 
 class SparkRunner:
     """Data processor and datamarts collector class
 
     ## Usage
-    >>> holder = ArgsHolder(
+    >>> keeper = ArgsKeeper(
     ...     date="2022-04-26",
     ...     depth=2,
     ...     src_path="s3a://data-ice-lake-05/messager-data/analytics/geo-events",
@@ -59,19 +47,22 @@ class SparkRunner:
     ...     )
     >>> spark = SparkRunner() # initialize class
     >>> spark.init_session(app_name="data-collector-app", log4j_level="INFO") # start session
-    >>> spark.collect_friend_recommendation_datamart(holder=holder) # execute job
+    >>> spark.collect_friend_recommendation_datamart(keeper=keeper) # execute job
     >>> spark.stop_session() # stop session
-
     """
 
     def __init__(self) -> None:
+        config = Config()
+        env = EnvironManager()
+        env.load_environ()
+        
         self.logger = SparkLogger(level=config.python_log_level).get_logger(
             logger_name=__name__
         )
-        self.validator = SparkArgsValidator()
+        # self.validator = SparkArgsValidator()  # ? delete? rewrite?
 
     def _get_s3_instance(self):
-        "Get boto3 S3 connection instance"
+        "Get ready-to-use boto3 S3 connection instance"
 
         self.logger.debug("Getting s3 connection instace")
 
@@ -86,48 +77,51 @@ class SparkRunner:
 
     def _get_src_paths(
         self,
-        holder: ArgsHolder,
+        event_type: Literal["message", "reaction", "subscription"],
+        keeper: ArgsKeeper,
     ) -> List[str]:
         """Get S3 paths contains dataset partitions.
 
-        Collects paths corresponding to the passed in `holder` object arguments and checks if each path exists on S3. Collects only existing paths.
+        Collects paths corresponding to the passed in `keeper` object arguments and checks if each path exists on S3. Collects only existing paths.
 
         If no paths for given arguments kill process.
 
         ## Parameters
-        `event_type` : Event type for partition
-        `holder` : Dataclass-like object with Spark Job arguments
+        `event_type` : Event type of partitions
+        `keeper` : Dataclass-like object with Spark Job arguments
 
         ## Returns
         `List[str]` : List with existing partition paths on s3
 
         ## Examples
-        >>> holder = ArgsHolder(date="2022-03-12", depth=10, ..., src_path="s3a://data-ice-lake-04/messager-data/analytics/geo-events")
-        >>> src_paths = self._get_src_paths(holder=holder)
+        >>> keeper = ArgsKeeper(date="2022-03-12", depth=10, ..., src_path="s3a://data-ice-lake-05/messager-data/analytics/geo-events")
+        >>> src_paths = self._get_src_paths(event_type="message", keeper=keeper)
         >>> print(len(src_paths))
         4 # only 4 paths exists on s3
         >>> print(type(src_paths))
         <class 'list'>
         >>> for _ in src_paths: print(_) # how it looks
-        "s3a://data-ice-lake-04/messager-data/analytics/geo-events/date=2022-03-12"
+        "s3a://data-ice-lake-05/messager-data/analytics/geo-events/event_type=message/date=2022-03-12"
         ...
-        "s3a://data-ice-lake-04/messager-data/analytics/geo-events/date=2022-03-11"
+        "s3a://data-ice-lake-05/messager-data/analytics/geo-events/event_type=message/date=2022-03-11"
         """
         s3 = self._get_s3_instance()
 
-        self.logger.debug("Collecting src paths")
+        self.logger.debug(f"Collecting src paths for {event_type} event type")
 
-        date = datetime.strptime(holder.date, "%Y-%m-%d").date()
+        date = datetime.strptime(keeper.date, "%Y-%m-%d").date()
 
         paths = [
-            f"{holder.src_path}/date=" + str(date - timedelta(days=i))
-            for i in range(int(holder.depth))
+            f"{keeper.src_path}/event_type={event_type}/date="
+            + str(date - timedelta(days=i))
+            for i in range(int(keeper.depth))
         ]
 
         self.logger.debug("Checking if each path exists on s3")
 
         existing_paths = []
         for path in paths:
+            self.logger.debug(f"Checking {path}")
             try:
                 response = s3.list_objects(
                     Bucket=path.split(sep="/")[2],
@@ -136,6 +130,7 @@ class SparkRunner:
                 )
                 if "Contents" in response.keys():
                     existing_paths.append(path)
+                    self.logger.debug("OK")
                 else:
                     self.logger.debug(f"No data for `{path}` on s3. Skipping")
             except ClientError as e:
@@ -147,13 +142,14 @@ class SparkRunner:
             self.logger.error("There is no data for given arguments!")
             sys.exit(1)
 
-        self.logger.debug(f"Done with {len(existing_paths)} paths in total")
+        self.logger.debug(f"Done. {len(existing_paths)} paths collected")
 
         return existing_paths
 
     def init_session(
         self,
         app_name: str,
+        spark_conf: SparkConfigKeeper,
         log4j_level: Literal[
             "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
         ] = "WARN",
@@ -162,6 +158,7 @@ class SparkRunner:
 
         ## Parameters
         `app_name` : Name of Spark application
+        `spark_conf` : `SparkConfigKeeper` object with Spark configuration properties
         `log4j_level` : Spark Context Java logging level, by default "WARN"
         """
 
@@ -177,12 +174,20 @@ class SparkRunner:
             .config(
                 "spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem"
             )
-            .config("spark.executor.memory", "1300m")
-            .config("spark.executor.cores", "1")
-            # .config("spark.executor.instances", "12")
-            .config("spark.dynamicAllocation.maxExecutors", "28")
+            .config("spark.executor.memory", spark_conf.executor_memory)
+            .config("spark.executor.cores", str(spark_conf.executor_cores))
+            .config(
+                "spark.dynamicAllocation.maxExecutors",
+                str(spark_conf.max_executors_num),
+            )
             .appName(app_name)
             .getOrCreate()
+        )
+        self.logger.info(
+            "Spark job properties:\n"
+            f"\tspark.executor.memory: {spark_conf.executor_memory}\n"
+            f"\tpark.executor.cores: {spark_conf.executor_cores}\n"
+            f"\tspark.dynamicAllocation.maxExecutors: {spark_conf.max_executors_num}"
         )
 
         self.spark.sparkContext.setLogLevel(log4j_level)
@@ -363,17 +368,17 @@ class SparkRunner:
 
         return sdf
 
-    def _get_users_actual_data_dataframe(self, holder: ArgsHolder) -> DataFrame:
+    def _get_users_actual_data_dataframe(self, keeper: ArgsKeeper) -> DataFrame:
         """Returns dataframe with user information based on sent messages
 
         ## Parameters
-        `holder` : Arguments holder object
+        `keeper` : Arguments keeper object
 
         ## Returns
         `DataFrame` : `pyspark.sql.DataFrame`
 
         ## Examples
-        >>> sdf = self._get_users_actual_data_dataframe(holder=holder)
+        >>> sdf = self._get_users_actual_data_dataframe(keeper=keeper)
         >>> sdf.printSchema()
         root
         |-- user_id: long (nullable = true)
@@ -398,20 +403,23 @@ class SparkRunner:
         |    418|   1115254|2022-04-25 ... |      Perth|      Perth|          4|2022-04-26 ... |
         +-------+----------+---------------+-----------+-----------+-----------+---------------+
         """
-        self.logger.debug(f"Getting input data from: {holder.src_path}")
+        self.logger.debug(f"Getting input data from: {keeper.src_path}")
 
-        src_paths = self._get_src_paths(holder=holder)
-        events_sdf = self.spark.read.parquet(*src_paths)
+        src_paths = self._get_src_paths(event_type="message", keeper=keeper)
+        events_sdf = (
+            self.spark.read.option("mergeSchema", "true")
+            .option("cacheMetadata", "true")
+            .parquet(*src_paths)
+        )
 
         self.logger.debug("Collecting dataframe")
         sdf = (
-            events_sdf.where(events_sdf.event_type == "message")
-            .where(events_sdf.event.message_from.isNotNull())
+            events_sdf.where(events_sdf.message_from.isNotNull())
             .select(
-                events_sdf.event.message_from.alias("user_id"),
-                events_sdf.event.message_id.alias("message_id"),
-                events_sdf.event.message_ts.alias("message_ts"),
-                events_sdf.event.datetime.alias("datetime"),
+                events_sdf.message_from.alias("user_id"),
+                events_sdf.message_id,
+                events_sdf.message_ts,
+                events_sdf.datetime,
                 events_sdf.lat.alias("event_lat"),
                 events_sdf.lon.alias("event_lon"),
             )
@@ -466,17 +474,17 @@ class SparkRunner:
 
         return sdf
 
-    def collect_users_info_datamart(self, holder: ArgsHolder) -> None:
+    def collect_users_info_datamart(self, keeper: ArgsKeeper) -> None:
         """Collect users info datamart and save results on s3
 
         ## Parameters
-        `holder` : Arguments holder object
+        `keeper` : Arguments keeper object
 
         ## Examples
         >>> spark = SparkRunner()
-        >>> spark.init_session(app_name="testing-app", log4j_level="INFO")
-        >>> spark.collect_users_info_datamart(holder=holder) # saved results on s3
-        >>> sdf = spark.read.parquet(f"{holder.tgt_path}") # reading saved results
+        >>> spark.init_session(app_name="testing-app", spark_conf=conf, log4j_level="INFO")
+        >>> spark.collect_users_info_datamart(keeper=keeper) # saved results on s3
+        >>> sdf = spark.read.parquet(f"{keeper.tgt_path}") # reading saved results
         >>> sdf.printSchema()
         root
         |-- user_id: long (nullable = true)
@@ -506,7 +514,7 @@ class SparkRunner:
 
         job_start = datetime.now()
 
-        sdf = self._get_users_actual_data_dataframe(holder=holder)
+        sdf = self._get_users_actual_data_dataframe(keeper=keeper)
 
         self.logger.debug("Collecting dataframe with travels data. Processing...")
         travels_sdf = (
@@ -570,7 +578,7 @@ class SparkRunner:
             .select("user_id", f.col("prev_travel_city").alias("home_city"))
         )
 
-        self.logger.debug("Collecting resulting dataframe")
+        self.logger.debug("Collecting datamart")
 
         sdf = (
             sdf.drop_duplicates(subset=["user_id"])
@@ -587,15 +595,15 @@ class SparkRunner:
         )
         sdf = sdf.fillna(value="Couldn't determine", subset="home_city")
 
-        sdf.show(100)
+        sdf.show(100)  # todo delete
 
         self.logger.info("Datamart collected")
         self.logger.info("Writing results")
 
         processed_dt = datetime.strptime(
-            holder.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
+            keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
         ).date()
-        OUTPUT_PATH = f"{holder.tgt_path}/date={processed_dt}"
+        OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
         try:
             sdf.repartition(1).write.parquet(
                 path=OUTPUT_PATH,
@@ -616,16 +624,16 @@ class SparkRunner:
         job_end = datetime.now()
         self.logger.info(f"Job execution time: {job_end - job_start}")
 
-    def collect_location_zone_agg_datamart(self, holder: ArgsHolder) -> None:
+    def collect_location_zone_agg_datamart(self, keeper: ArgsKeeper) -> None:
         """Collect location zone aggregation datamart and save results on s3
 
         ## Parameters
-        `holder` : Arguments holder object
+        `keeper` : Arguments keeper object
 
         ## Examples
         >>> spark.init_session(app_name="testing-app", log4j_level="INFO")
-        >>> spark.collect_location_zone_agg_datamart(holder=holder) # saved results on s3
-        >>> sdf = spark.read.parquet(f"{holder.tgt_path}") # reading saved results
+        >>> spark.collect_location_zone_agg_datamart(keeper=keeper) # saved results on s3
+        >>> sdf = spark.read.parquet(f"{keeper.tgt_path}") # reading saved results
         >>> sdf.printSchema()
         root
         |-- zone_id: integer (nullable = true)
@@ -660,9 +668,9 @@ class SparkRunner:
         self.logger.info("Staring collecting location zone aggregated datamart")
         job_start = datetime.now()
 
-        self.logger.debug(f"Getting input data from: {holder.src_path}")
+        self.logger.debug(f"Getting input data from: {keeper.src_path}")
 
-        src_paths = self._get_src_paths(holder=holder)
+        src_paths = self._get_src_paths(keeper=keeper)
         events_sdf = self.spark.read.parquet(*src_paths)
 
         self.logger.debug("Collecing messages dataframe. Processing...")
@@ -856,9 +864,9 @@ class SparkRunner:
         self.logger.info("Writing results")
 
         processed_dt = datetime.strptime(
-            holder.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
+            keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
         ).date()
-        OUTPUT_PATH = f"{holder.tgt_path}/date={processed_dt}"
+        OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
         try:
             sdf.repartition(1).write.parquet(
                 path=OUTPUT_PATH,
@@ -879,17 +887,17 @@ class SparkRunner:
         job_end = datetime.now()
         self.logger.info(f"Job execution time: {job_end - job_start}")
 
-    def collect_friend_recommendation_datamart(self, holder: ArgsHolder) -> None:
+    def collect_friend_recommendation_datamart(self, keeper: ArgsKeeper) -> None:
         """Collect friend recommendation datamart and save results on s3
 
         ## Parameters
-        `holder` : Arguments holder object
+        `keeper` : Arguments keeper object
 
         ## Examples
         >>> spark = SparkRunner()
         >>> spark.init_session(app_name="testing-app", log4j_level="INFO")
-        >>> spark.collect_friend_recommendation_datamart(holder=holder) # saved results on s3
-        >>> sdf = spark.read.parquet(f"{holder.tgt_path}") # reading saved results
+        >>> spark.collect_friend_recommendation_datamart(keeper=keeper) # saved results on s3
+        >>> sdf = spark.read.parquet(f"{keeper.tgt_path}") # reading saved results
         >>> sdf.printSchema()
         root
         |-- left_user: string (nullable = true)
@@ -901,7 +909,7 @@ class SparkRunner:
         self.logger.info("Starting collecting friend recommendations datamart")
         job_start = datetime.now()
 
-        src_paths = self._get_src_paths(holder=holder)
+        src_paths = self._get_src_paths(keeper=keeper)
         events_sdf = self.spark.read.parquet(*src_paths)
 
         self.logger.debug("Collecting dataframe with real contacts")
@@ -1027,7 +1035,7 @@ class SparkRunner:
             dataframe=users_for_rec, coord_cols_prefix=["left_user", "right_user"]
         )
 
-        users_info_sdf = self._get_users_actual_data_dataframe(holder=holder)
+        users_info_sdf = self._get_users_actual_data_dataframe(keeper=keeper)
 
         self.logger.debug("Collecting resulting dataframe")
 
@@ -1044,7 +1052,7 @@ class SparkRunner:
                 how="left",
             )
             .withColumn(
-                "processed_dttm", f.lit(holder.processed_dttm.replace("T", " "))
+                "processed_dttm", f.lit(keeper.processed_dttm.replace("T", " "))
             )
             .select(
                 "left_user",
@@ -1060,9 +1068,9 @@ class SparkRunner:
         self.logger.info("Writing results")
 
         processed_dt = datetime.strptime(
-            holder.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
+            keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
         ).date()
-        OUTPUT_PATH = f"{holder.tgt_path}/date={processed_dt}"
+        OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
         try:
             sdf.repartition(1).write.parquet(
                 path=OUTPUT_PATH,
@@ -1083,41 +1091,20 @@ class SparkRunner:
         job_end = datetime.now()
         self.logger.info(f"Job execution time: {job_end - job_start}")
 
-    def move_data(self):
+    def testing(self, keeper: ArgsKeeper) -> None:  # todo delete this func
+        df = self._get_users_actual_data_dataframe(keeper=keeper)
+
+        df.show(200)
+        df.printSchema()
+
+    def _move_data(self):
+        "Move data between DWH layers"
         job_start = datetime.now()
-
-        # start_date = date(2022, 1, 1)
-        # end_date = date(2022, 1, 31)
-        # delta = timedelta(days=1)
-        # dates = []
-        # while start_date <= end_date:
-        #     dates.append(start_date)
-        #     start_date += delta
-        # from functools import reduce
-
-        # dataframes = []
-        # for dt in dates:
-        #     self.logger.info(f"Provessing {dt}")
-        #     sdf = self.spark.read.parquet(
-        #         f"s3a://data-ice-lake-04/messager-data/analytics/geo-events/date=2022-01-01"
-        #     )
-        #     self.logger.info(f"Dataframe for {dt} date collected")
-
-        #     dataframes.append(sdf)
-
-        # self.logger.info(f"Reducing")
-        # df = reduce(DataFrame.unionByName, dataframes)
-        # self.logger.info("Done. Collecting...")
 
         df = (
             self.spark.read.option("mergeSchema", "true")
             .option("cacheMetadata", "true")
             .parquet("s3a://data-ice-lake-04/messager-data/analytics/geo-events")
-            # .read.option("mergeSchema", "true")
-            # .option("cacheMetadata", "true")
-            # .option("enableVectorizedReader", "true")
-            # .option("useDataSourceApi", "true")
-            # .option("inMemoryColumnarStorage.compressed", "true")
         )
         df = df.repartition(56)
 
@@ -1178,11 +1165,9 @@ class SparkRunner:
                 "date",
             )
         )
-        df = df.repartition(1)
 
-        self.logger.info("Writing cleaned dataset to s3.")
         tgt_path = "s3a://data-ice-lake-05/messager-data/analytics/geo-events"
-        df.write.parquet(
+        df.repartition(1).write.parquet(
             path=tgt_path,
             mode="overwrite",
             partitionBy=["event_type", "date"],
@@ -1190,77 +1175,3 @@ class SparkRunner:
         )
         job_end = datetime.now()
         self.logger.info(f"Job execution time: {job_end - job_start}")
-
-    def testing(self) -> None:
-        df = self.spark.read.parquet(
-            "s3a://data-ice-lake-05/messager-data/analytics/geo-events"
-        ).where("date > '2022-01-15' and date < '2022-02-15'")
-
-        df.show(200)
-        df.printSchema()
-
-    def run_tags_job(
-        self,
-        holder: TagsJobArgsHolder,
-    ) -> None:
-        try:
-            self.validator.validate_tags_job_args(holder=holder)
-        except AssertionError as e:
-            self.logger.exception(e)
-            sys.exit(1)
-
-        src_paths = self._get_src_paths(event_type="message", holder=holder)
-
-        self.logger.info(f"Starting `tags` job")
-
-        self.logger.info("Getting `messages` dataset from s3")
-        messages = self.spark.read.parquet(*src_paths, compression="gzip")
-        self.logger.info(f"Done. Rows in dataset {messages.count()}.")
-
-        self.logger.info("Getting `tags_verified` dataset from s3")
-        tags_verified = self.spark.read.parquet(holder.tags_verified_path)
-        self.logger.info("Done")
-
-        self.logger.info("Preparing `tags_verified`")
-        tags_verified = (
-            tags_verified.withColumn("tag", trim(tags_verified.tag))
-            .select("tag")
-            .distinct()
-        )
-        self.logger.info("Done")
-
-        self.logger.info("Grouping `messages` dataset")
-        all_tags = (
-            messages.where(messages.message_channel_to.isNotNull())
-            .withColumn("tag", explode(messages.tags))
-            .select(col("message_from"), col("tag"))
-            .groupBy(col("tag"))
-            .agg(count_distinct(messages.message_from).alias("suggested_count"))
-            .where(col("suggested_count") >= holder.threshold)
-        )
-        self.logger.info(f"Done. Rows in dataset: {all_tags.count()}")
-
-        self.logger.info("Excluding verified tags.")
-        tags = all_tags.join(other=tags_verified, on="tag", how="left_anti")
-        self.logger.info(f"Done. Rows in dataset: {tags.count()}")
-
-        self.logger.info(
-            f"Writing parquet -> {holder.tgt_path}/date={holder.date}/candidates-d{holder.depth}"
-        )
-        try:
-            tags.repartition(1).write.parquet(
-                path=f"{holder.tgt_path}/date={holder.date}/candidates-d{holder.depth}",
-                mode="errorifexists",
-                compression="gzip",
-            )
-            self.logger.info("Done")
-        except Exception:
-            self.logger.warning(
-                "Notice that file already exists on s3 and will be overwritten!"
-            )
-            tags.repartition(1).write.parquet(
-                path=f"{holder.tgt_path}/date={holder.date}/candidates-d{holder.depth}",
-                mode="overwrite",
-                compression="gzip",
-            )
-            self.logger.info("Done")
