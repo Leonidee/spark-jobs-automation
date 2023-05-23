@@ -1,5 +1,4 @@
 import sys
-from logging import getLogger
 from pathlib import Path
 
 from pyspark.sql.utils import AnalysisException, CapturedException

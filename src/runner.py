@@ -55,7 +55,7 @@ class SparkRunner:
         config = Config()
         env = EnvironManager()
         env.load_environ()
-        
+
         self.logger = SparkLogger(level=config.python_log_level).get_logger(
             logger_name=__name__
         )
@@ -461,6 +461,9 @@ class SparkRunner:
                     timestamp=f.col("last_msg_ts"), tz="Australia/Sydney"
                 ),
             )
+            .withColumn(
+                "timezone", f.concat(f.col("act_city"), "Australia")
+            )  # todo брать таумзону отсюда
             .select(
                 "user_id",
                 "message_id",
@@ -472,7 +475,7 @@ class SparkRunner:
             )
         )
 
-        return sdf
+        # return sdf
 
     def collect_users_info_datamart(self, keeper: ArgsKeeper) -> None:
         """Collect users info datamart and save results on s3
@@ -595,9 +598,8 @@ class SparkRunner:
         )
         sdf = sdf.fillna(value="Couldn't determine", subset="home_city")
 
-        sdf.show(100)  # todo delete
+        self.logger.info("Datamart collected!")
 
-        self.logger.info("Datamart collected")
         self.logger.info("Writing results")
 
         processed_dt = datetime.strptime(
@@ -633,7 +635,7 @@ class SparkRunner:
         ## Examples
         >>> spark.init_session(app_name="testing-app", log4j_level="INFO")
         >>> spark.collect_location_zone_agg_datamart(keeper=keeper) # saved results on s3
-        >>> sdf = spark.read.parquet(f"{keeper.tgt_path}") # reading saved results
+        >>> sdf = spark.read.parquet(keeper.tgt_path) # reading saved results
         >>> sdf.printSchema()
         root
         |-- zone_id: integer (nullable = true)
@@ -668,24 +670,20 @@ class SparkRunner:
         self.logger.info("Staring collecting location zone aggregated datamart")
         job_start = datetime.now()
 
-        self.logger.debug(f"Getting input data from: {keeper.src_path}")
-
-        src_paths = self._get_src_paths(keeper=keeper)
-        events_sdf = self.spark.read.parquet(*src_paths)
-
         self.logger.debug("Collecing messages dataframe. Processing...")
 
-        # сборка messages
+        src_paths = self._get_src_paths(keeper=keeper, event_type="message")
+        messages_sdf = self.spark.read.parquet(*src_paths)
+
         messages_sdf = (
-            events_sdf.where(events_sdf.event_type == "message")
-            .where(events_sdf.event.message_from.isNotNull())
+            messages_sdf.where(messages_sdf.message_from.isNotNull())
             .select(
-                events_sdf.event.message_from.alias("user_id"),
-                events_sdf.event.message_id.alias("message_id"),
-                events_sdf.event.message_ts.alias("message_ts"),
-                events_sdf.event.datetime.alias("datetime"),
-                events_sdf.lat.alias("event_lat"),
-                events_sdf.lon.alias("event_lon"),
+                messages_sdf.message_from.alias("user_id"),
+                messages_sdf.message_id,
+                messages_sdf.message_ts,
+                messages_sdf.datetime,
+                messages_sdf.lat.alias("event_lat"),
+                messages_sdf.lon.alias("event_lon"),
             )
             .withColumn(
                 "msg_ts",
@@ -713,18 +711,20 @@ class SparkRunner:
                 ),
             )
         )
+        messages_sdf.show(100)  # todo delete this
 
         self.logger.debug("Collecing reacitons dataframe. Processing...")
 
-        # сборка reactions
+        src_paths = self._get_src_paths(keeper=keeper, event_type="reaction")
+        reaction_sdf = self.spark.read.parquet(*src_paths)
+
         reaction_sdf = (
-            events_sdf.where(events_sdf.event_type == "reaction")
-            .select(
-                events_sdf.event.datetime.alias("datetime"),
-                events_sdf.event.message_id.alias("message_id"),
-                events_sdf.event.reaction_from.alias("user_id"),
-                events_sdf.lat.alias("event_lat"),
-                events_sdf.lon.alias("event_lon"),
+            reaction_sdf.select(
+                reaction_sdf.datetime,
+                reaction_sdf.message_id,
+                reaction_sdf.reaction_from.alias("user_id"),
+                reaction_sdf.lat.alias("event_lat"),
+                reaction_sdf.lon.alias("event_lon"),
             )
             .drop_duplicates(subset=["user_id", "message_id", "datetime"])
             .where(f.col("event_lat").isNotNull())
@@ -746,20 +746,22 @@ class SparkRunner:
                 ),
             )
         )
+        reaction_sdf.show(100)  # todo delete
 
         self.logger.debug("Collecing registrations dataframe. Processing...")
 
-        # сборка registrations
+        src_paths = self._get_src_paths(keeper=keeper, event_type="message")
+        registrations_sdf = self.spark.read.parquet(*src_paths)
+
         registrations_sdf = (
-            events_sdf.where(events_sdf.event_type == "message")
-            .where(events_sdf.event.message_from.isNotNull())
+            registrations_sdf.where(registrations_sdf.message_from.isNotNull())
             .select(
-                events_sdf.event.message_from.alias("user_id"),
-                events_sdf.event.message_id.alias("message_id"),
-                events_sdf.event.message_ts.alias("message_ts"),
-                events_sdf.event.datetime.alias("datetime"),
-                events_sdf.lat.alias("event_lat"),
-                events_sdf.lon.alias("event_lon"),
+                registrations_sdf.message_from.alias("user_id"),
+                registrations_sdf.message_id,
+                registrations_sdf.message_ts,
+                registrations_sdf.datetime,
+                registrations_sdf.lat.alias("event_lat"),
+                registrations_sdf.lon.alias("event_lon"),
             )
             .withColumn(
                 "msg_ts",
@@ -803,17 +805,20 @@ class SparkRunner:
             )
         )
 
+        registrations_sdf.show(100)
+
         self.logger.debug("Collecing subscriptions dataframe. Processing...")
 
-        # сборка subscriptions
+        src_paths = self._get_src_paths(keeper=keeper, event_type="subscription")
+        subscriptions_sdf = self.spark.read.parquet(*src_paths)
+
         subscriptions_sdf = (
-            events_sdf.where(events_sdf.event_type == "subscription")
-            .select(
-                events_sdf.event.datetime.alias("datetime"),
-                events_sdf.event.subscription_channel.alias("subscription_channel"),
-                events_sdf.event.user.alias("user_id"),
-                events_sdf.lat.alias("event_lat"),
-                events_sdf.lon.alias("event_lon"),
+            subscriptions_sdf.select(
+                subscriptions_sdf.datetime,
+                subscriptions_sdf.subscription_channel,
+                subscriptions_sdf.user.alias("user_id"),
+                subscriptions_sdf.lat.alias("event_lat"),
+                subscriptions_sdf.lon.alias("event_lon"),
             )
             .drop_duplicates(subset=["user_id", "subscription_channel", "datetime"])
             .where(f.col("event_lat").isNotNull())
@@ -837,7 +842,9 @@ class SparkRunner:
             )
         )
 
-        self.logger.debug("Joining resulsts")
+        subscriptions_sdf.show(100)
+
+        self.logger.debug("Joining dataframes")
 
         cols = ["zone_id", "week", "month"]
         sdf = (
@@ -859,7 +866,7 @@ class SparkRunner:
                 "month_user",
             )
         )
-        self.logger.info("Datamart collected")
+        self.logger.info("Datamart collected!")
 
         self.logger.info("Writing results")
 
