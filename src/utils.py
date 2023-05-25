@@ -38,6 +38,16 @@ class ArgsKeeper(BaseModel):
 
 
 class EnvironManager:
+    """Project environment manager.
+
+    ## Examples
+    Initialize Class instance:
+    >>> env = EnvironManager()
+
+    Find .env file in project and load variables from it:
+    >>> env.load_environ()
+    """
+
     def __init__(self) -> None:
         config = Config()
         from dotenv import find_dotenv, load_dotenv
@@ -51,7 +61,10 @@ class EnvironManager:
     def load_environ(self, dotenv_file_name: str = ".env") -> bool:
         """Find .env file and load environment variables from it.
 
-        Overrides system environment variables.
+        ## Notes
+        Overrides system environment variables with same names.
+
+        `.env` file should located in root project directory. Notice the example one: `./.env.template`
 
         ## Parameters
         `dotenv_file_name` : Path to .env file, by default ".env"

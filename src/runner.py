@@ -12,12 +12,8 @@ from botocore.exceptions import ClientError
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config
 from src.logger import SparkLogger
-from src.utils import (
-    # SparkArgsValidator,
-    EnvironManager,
-    ArgsKeeper,
-    SparkConfigKeeper,
-)
+from src.utils import EnvironManager  # SparkArgsValidator,
+from src.utils import ArgsKeeper, SparkConfigKeeper
 
 os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
 os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
@@ -28,16 +24,13 @@ os.environ["PYTHONPATH"] = "/opt/conda/bin/python3"
 findspark.init()
 findspark.find()
 
-from pyspark.sql import DataFrame, SparkSession, Window
 import pyspark.sql.functions as f
+from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.storagelevel import StorageLevel
-import pandas as pd
-
-pd.DataFrame()
 
 
 class SparkRunner:
-    """Data processor and datamarts collector class
+    """Data processor and datamarts collector class.
 
     ## Usage
     Initialize all needed dataclasses:
@@ -61,7 +54,7 @@ class SparkRunner:
     And now execute chosen job:
     >>> spark.collect_friend_recommendation_datamart(keeper=keeper)
 
-    Don't forget to stop session:
+    Don't forget to always stop session:
     >>> spark.stop_session()
     """
 
@@ -370,7 +363,7 @@ class SparkRunner:
             sdf.withColumn(
                 "city_dist_rnk",
                 f.row_number().over(
-                    Window().partitionBy(partition_by).orderBy(f.asc("distance"))
+                    Window().partitionBy(partition_by).orderBy(f.asc("distance"))  # type: ignore
                 ),
             )
             .where(f.col("city_dist_rnk") == 1)
@@ -899,7 +892,7 @@ class SparkRunner:
             messages_sdf.join(other=reaction_sdf, on=cols)
             .join(other=registrations_sdf, on=cols)
             .join(other=subscriptions_sdf, on=cols)
-            .orderBy(cols)
+            .orderBy(cols)  # type: ignore
             .select(
                 "zone_id",
                 "week",

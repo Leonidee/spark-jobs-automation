@@ -2,11 +2,36 @@ import yaml
 
 
 class Config:
-    def __init__(self) -> None:
-        """Project config
+    """Parses project configuration file: `config.yaml`.
 
-        Contains configurations for Spark Jobs and environment
-        """
+    File contains configurations for Spark Jobs and project environment.
+
+    ## Notes
+    Confinguration file should be located in root project directory.
+
+    ## Examples
+    Initialize Class instance:
+    >>> config = Config()
+
+    Check if we on prod:
+    >>> config.IS_PROD
+    False
+
+    Show python logging level:
+    >>> config.python_log_level
+    INFO
+
+    Get Spark Job arguments:
+    >>> config.get_users_info_datamart_config["DATE"]
+    2022-03-12
+    >>> config.get_users_info_datamart_config["SRC_PATH"]
+    s3a://data-ice-lake-05/messager-data/analytics/geo-events
+    >>> a, b, c, d = config.get_users_info_datamart_config.values()
+    >>> print(a)
+    2022-03-12
+    """
+
+    def __init__(self) -> None:
         with open("config.yaml") as f:
             self.config = yaml.safe_load(f)
         self._is_prod = self.config["environ"]["IS_PROD"]

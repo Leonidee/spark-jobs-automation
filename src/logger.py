@@ -4,16 +4,22 @@ import sys
 
 
 class SparkLogger(logging.Logger):
-    """Python Logger instance
+    """Python Logger instance.
 
-    ## Usage
+    ## Notes
+    The Class instance configured to write logs only in `stgout` and `stgerr`.
+
+    ## Examples
+    Creating class instance example:
     >>> logger = SparkLogger(level="DEBUG").get_logger(logger_name=__name__)
+
+    Common usage:
     >>> logger.info("This is a test!")
     [2023-05-24 17:32:16] {__main__:4} INFO: This is a test!
     """
 
     def __init__(self, level: str = "INFO"):
-        self.level = level
+        self.level = level  # type: ignore
 
     def get_logger(self, logger_name: str) -> logging.Logger:
         """Returns configured ready-for-use logger instance
@@ -22,7 +28,7 @@ class SparkLogger(logging.Logger):
         `logger_name` : Name of the logger
 
         ## Returns
-        `logging.Logger` : Return Logger class object
+        `logging.Logger` : Returns Logger class object
         """
         logger = logging.getLogger(name=logger_name)
 
@@ -39,12 +45,12 @@ class SparkLogger(logging.Logger):
             datefmt="%Y-%m-%d %H:%M:%S",
             level_styles=dict(
                 info=dict(color="green"),
-                error=dict(color="red", bold=False, bright=True),
+                error=dict(color="red", bold=False, bright=True),  # type: ignore
             ),
             field_styles=dict(
                 asctime=dict(color="magenta"),
                 name=dict(color="cyan"),
-                levelname=dict(color="yellow", bold=False, bright=True),
+                levelname=dict(color="yellow", bold=False, bright=True),  # type: ignore
                 lineno=dict(color="white"),
             ),
         )
