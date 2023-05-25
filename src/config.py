@@ -27,10 +27,6 @@ class Config:
         self._is_prod = None
 
     @property
-    def tags_config(self) -> dict:
-        return self.config["spark"]["jobs"]["tags"]
-
-    @property
     def get_users_info_datamart_config(self) -> dict:
         return self.config["spark"]["jobs"]["users_info_datamart"]
 

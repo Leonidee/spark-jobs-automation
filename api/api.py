@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.utils import TagsJobArgsHolder
+from src.utils import ArgsKeeper
 
 app = FastAPI()
 
@@ -23,6 +23,22 @@ def submit_tags_job(holder: TagsJobArgsHolder):
         holder.tags_verified_path,
         holder.src_path,
         holder.tgt_path,
+    ]
+    output = subprocess.run(args=CMD, capture_output=True, text=True, encoding="utf-8")
+
+    return output
+
+
+@app.post("/submit_users_info_datamart_job")
+def submit_users_info_datamart_job(keeper: ArgsKeeper):
+    CMD = [
+        "/usr/bin/spark-submit",
+        "/home/ubuntu/code/spark-jobs-automation/jobs/users_info_datamart_job.py",
+        keeper.date,
+        str(keeper.depth),
+        keeper.src_path,
+        keeper.tgt_path,
+        keeper.processed_dttm,
     ]
     output = subprocess.run(args=CMD, capture_output=True, text=True, encoding="utf-8")
 

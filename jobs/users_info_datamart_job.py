@@ -18,28 +18,24 @@ logger = SparkLogger(level=config.python_log_level).get_logger(logger_name=__nam
 
 def main() -> None:
     try:
-        # if len(sys.argv) > 6:
-        #     raise KeyError
+        DATE = str(sys.argv[1])
+        DEPTH = int(sys.argv[2])
+        SRC_PATH = str(sys.argv[3])
+        TGT_PATH = str(sys.argv[4])
+        PROCESSED_DTTM = str(sys.argv[5])
 
-        # holder = ArgsKeeper(
-        #     date=str(sys.argv[1]),
-        #     depth=int(sys.argv[2]),
-        #     src_path=str(sys.argv[3]),
-        #     tgt_path=str(sys.argv[4]),
-        #     processed_dttm=str(sys.argv[5]),
-        # )
-        conf = SparkConfigKeeper(
-            executor_memory="3000m", executor_cores=1, max_executors_num=12
-        )
-        # todo remove this
-        from datetime import datetime
+        if len(sys.argv) > 6:
+            raise KeyError("Too many arguments for job submitting! Expected 5")
 
         keeper = ArgsKeeper(
-            date="2022-04-26",
-            depth=30,
-            src_path="s3a://data-ice-lake-05/messager-data/analytics/geo-events",
-            tgt_path="s3a://data-ice-lake-05/messager-data/analytics/tmp/location_zone_agg_datamart",
-            processed_dttm=str(datetime.now()),
+            date=DATE,
+            depth=DEPTH,
+            src_path=SRC_PATH,
+            tgt_path=TGT_PATH,
+            processed_dttm=PROCESSED_DTTM,
+        )
+        conf = SparkConfigKeeper(
+            executor_memory="3000m", executor_cores=1, max_executors_num=12
         )
 
     except (IndexError, KeyError) as e:
@@ -50,16 +46,16 @@ def main() -> None:
         spark.init_session(
             app_name=config.get_spark_application_name,
             spark_conf=conf,
-            log4j_level=config.log4j_level,
+            log4j_level=config.log4j_level,  # type: ignore
         )
-        spark.collect_location_zone_agg_datamart(keeper=keeper)
+        spark.collect_users_info_datamart(keeper=keeper)
 
     except (CapturedException, AnalysisException) as e:
         logger.exception(e)
         sys.exit(1)
 
     finally:
-        spark.stop_session()
+        spark.stop_session()  # type: ignore
 
 
 if __name__ == "__main__":

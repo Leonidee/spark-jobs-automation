@@ -3,7 +3,6 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, List, Literal
-from pandas import read_csv
 
 import boto3
 import findspark
@@ -31,13 +30,17 @@ findspark.find()
 
 from pyspark.sql import DataFrame, SparkSession, Window
 import pyspark.sql.functions as f
-from pyspark.sql.utils import AnalysisException
+from pyspark.storagelevel import StorageLevel
+import pandas as pd
+
+pd.DataFrame()
 
 
 class SparkRunner:
     """Data processor and datamarts collector class
 
     ## Usage
+    Initialize all needed dataclasses:
     >>> keeper = ArgsKeeper(
     ...     date="2022-04-26",
     ...     depth=2,
@@ -45,10 +48,21 @@ class SparkRunner:
     ...     tgt_path="s3a://data-ice-lake-05/messager-data/analytics/prod/friend_recommendation_datamart",
     ...     processed_dttm=str(datetime.now()),
     ...     )
-    >>> spark = SparkRunner() # initialize class
-    >>> spark.init_session(app_name="data-collector-app", log4j_level="INFO") # start session
-    >>> spark.collect_friend_recommendation_datamart(keeper=keeper) # execute job
-    >>> spark.stop_session() # stop session
+    >>> conf = SparkConfigKeeper(
+    ...     executor_memory="3000m", executor_cores=1, max_executors_num=12
+    ...     )
+
+    Initialize `SparkRunner` class object:
+    >>> spark = SparkRunner()
+
+    Start session:
+    >>> spark.init_session(app_name="data-collector-app", spark_conf=conf, log4j_level="INFO")
+
+    And now execute chosen job:
+    >>> spark.collect_friend_recommendation_datamart(keeper=keeper)
+
+    Don't forget to stop session:
+    >>> spark.stop_session()
     """
 
     def __init__(self) -> None:
@@ -249,7 +263,7 @@ class SparkRunner:
         """
 
         if len(coord_cols_prefix) > 2:
-            raise AnalysisException(
+            raise IndexError(
                 "Only two values are allowed for `coord_cols_prefix` argument"
             )
 
@@ -262,7 +276,7 @@ class SparkRunner:
 
         self.logger.debug("Checking if each columns exists in dataframe")
         if not all(col in dataframe.columns for col in (lat_1, lon_1, lat_2, lon_2)):
-            raise AnalysisException(
+            raise KeyError(
                 "DataFrame should contains coordinates columns with names listed in `coord_cols_prefix` argument"
             )
         self.logger.debug("OK")
@@ -329,9 +343,9 @@ class SparkRunner:
         |  91578|     11869| -41.04773532335144|147.26558385326746|2021-04-26 21:19:...|     20| Launceston|
         +-------+----------+-------------------+------------------+--------------------+-------+-----------+
         """
-        self.logger.debug(f"Getting location of `{event_type}` event type")
+        self.logger.debug(f"Collecting location of `{event_type}` event type")
 
-        self.logger.debug(f"Collecting cities coordinates dataframe from s3")
+        self.logger.debug(f"Getting cities coordinates dataframe from s3")
         cities_coords_sdf = self.spark.read.parquet(
             "s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates"
         )
@@ -344,7 +358,9 @@ class SparkRunner:
         self.logger.debug(
             "Joining given dataframe with cities coordinates. Processing..."
         )
-        sdf = dataframe.crossJoin(cities_coords_sdf)
+        sdf = dataframe.crossJoin(
+            cities_coords_sdf.select("city_id", "city_name", "city_lat", "city_lon")
+        )
         sdf = self._compute_distance(
             dataframe=sdf,
             coord_cols_prefix=["event", "city"],
@@ -403,6 +419,8 @@ class SparkRunner:
         |    418|   1115254|2022-04-25 ... |      Perth|      Perth|          4|2022-04-26 ... |
         +-------+----------+---------------+-----------+-----------+-----------+---------------+
         """
+        self.logger.debug("Collecting users actual data dataframe")
+
         self.logger.debug(f"Getting input data from: {keeper.src_path}")
 
         src_paths = self._get_src_paths(event_type="message", keeper=keeper)
@@ -412,7 +430,8 @@ class SparkRunner:
             .parquet(*src_paths)
         )
 
-        self.logger.debug("Collecting dataframe")
+        self.logger.debug("Collecting dataframe. Processing...")
+
         sdf = (
             events_sdf.where(events_sdf.message_from.isNotNull())
             .select(
@@ -434,7 +453,10 @@ class SparkRunner:
 
         sdf = self._get_event_location(dataframe=sdf, event_type="message")
 
-        self.logger.debug("Collecting resulting dataframe")
+        self.logger.debug("Getting cities coordinates dataframe from s3")
+        cities_coords_sdf = self.spark.read.parquet(
+            "s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates"
+        )
 
         sdf = (
             sdf.withColumn(
@@ -455,15 +477,17 @@ class SparkRunner:
                     Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
                 ),
             )
+            .join(
+                cities_coords_sdf.select("city_id", "timezone"),
+                on=f.col("act_city_id") == cities_coords_sdf.city_id,
+                how="left",
+            )
             .withColumn(
                 "local_time",
                 f.from_utc_timestamp(
-                    timestamp=f.col("last_msg_ts"), tz="Australia/Sydney"
+                    timestamp=f.col("last_msg_ts"), tz=f.col("timezone")
                 ),
             )
-            .withColumn(
-                "timezone", f.concat(f.col("act_city"), "Australia")
-            )  # todo брать таумзону отсюда
             .select(
                 "user_id",
                 "message_id",
@@ -475,7 +499,7 @@ class SparkRunner:
             )
         )
 
-        # return sdf
+        return sdf
 
     def collect_users_info_datamart(self, keeper: ArgsKeeper) -> None:
         """Collect users info datamart and save results on s3
@@ -484,10 +508,15 @@ class SparkRunner:
         `keeper` : Arguments keeper object
 
         ## Examples
+        Lets initialize class object and start session:
         >>> spark = SparkRunner()
         >>> spark.init_session(app_name="testing-app", spark_conf=conf, log4j_level="INFO")
-        >>> spark.collect_users_info_datamart(keeper=keeper) # saved results on s3
-        >>> sdf = spark.read.parquet(f"{keeper.tgt_path}") # reading saved results
+
+        Now we can execute class method that collects datamart:
+        >>> spark.collect_users_info_datamart(keeper=keeper)
+
+        And after that read saved results to see how it looks:
+        >>> sdf = spark.read.parquet(keeper.tgt_path)
         >>> sdf.printSchema()
         root
         |-- user_id: long (nullable = true)
@@ -603,7 +632,7 @@ class SparkRunner:
         self.logger.info("Writing results")
 
         processed_dt = datetime.strptime(
-            keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
+            keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S"
         ).date()
         OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
         try:
@@ -633,14 +662,20 @@ class SparkRunner:
         `keeper` : Arguments keeper object
 
         ## Examples
-        >>> spark.init_session(app_name="testing-app", log4j_level="INFO")
+        Lets initialize class object and start session:
+        >>> spark = SparkRunner()
+        >>> spark.init_session(app_name="testing-app", spark_conf=conf, log4j_level="INFO")
+
+        Now we can execute class method that collects datamart:
         >>> spark.collect_location_zone_agg_datamart(keeper=keeper) # saved results on s3
-        >>> sdf = spark.read.parquet(keeper.tgt_path) # reading saved results
+
+        And after that read saved results to see how it looks:
+        >>> sdf = spark.read.parquet(keeper.tgt_path)
         >>> sdf.printSchema()
         root
         |-- zone_id: integer (nullable = true)
-        |-- week: integer (nullable = true)
-        |-- month: integer (nullable = true)
+        |-- week: date (nullable = true)
+        |-- month: date (nullable = true)
         |-- week_message: long (nullable = false)
         |-- week_reaction: long (nullable = false)
         |-- week_subscription: long (nullable = false)
@@ -650,22 +685,20 @@ class SparkRunner:
         |-- month_subscription: long (nullable = true)
         |-- month_user: long (nullable = true)
         >>> sdf.show()
-        +-------+----+-----+------------+-------------+-----------------+---------+-------------+--------------+------------------+----------+
-        |zone_id|week|month|week_message|week_reaction|week_subscription|week_user|month_message|month_reaction|month_subscription|month_user|
-        +-------+----+-----+------------+-------------+-----------------+---------+-------------+--------------+------------------+----------+
-        |      1|  17|    4|         176|         1823|             6627|       95|          317|          1823|              6627|       186|
-        |      2|  17|    4|         401|         2214|            10473|      176|          711|          2214|             10473|       302|
-        |      3|  17|    4|         376|         2377|            14518|      230|          684|          2377|             14518|       426|
-        |      4|  17|    4|         191|         1033|             7310|      100|          354|          1033|              7310|       198|
-        |      5|  17|    4|         109|          782|             5325|       73|          190|           782|              5325|       134|
-                                                                ...
-        |     19|  17|    4|         367|         2048|            10021|      165|          671|          2048|             10021|       288|
-        |     20|  17|    4|         177|          935|             6774|      101|          324|           935|              6774|       198|
-        |     21|  17|    4|         206|          738|             5377|       84|          368|           738|              5377|       153|
-        |     22|  17|    4|         144|          713|             5454|       85|          246|           713|              5454|       159|
-        |     23|  17|    4|         280|         1047|             7060|      126|          491|          1047|              7060|       229|
-        |     24|  17|    4|          96|          689|             3531|       59|          179|           689|              3531|       107|
-        +-------+----+-----+------------+-------------+-----------------+---------+-------------+--------------+------------------+----------+
+        +-------+----------+----------+------------+-------------+-----------------+---------+-------------+--------------+------------------+----------+
+        |zone_id|week      |month     |week_message|week_reaction|week_subscription|week_user|month_message|month_reaction|month_subscription|month_user|
+        +-------+----------+----------+------------+-------------+-----------------+---------+-------------+--------------+------------------+----------+
+        |1      |2022-02-21|2022-02-01|78          |99           |3713             |77       |105          |123           |4739              |103       |
+        |1      |2022-02-28|2022-02-01|27          |24           |1026             |26       |105          |123           |4739              |103       |
+        |1      |2022-02-28|2022-03-01|134         |147          |6453             |130      |659          |1098          |45580             |630       |
+        |1      |2022-03-07|2022-03-01|145         |224          |8833             |143      |659          |1098          |45580             |630       |
+                                                                             ...
+        |3      |2022-02-28|2022-03-01|238         |142          |13786            |233      |1190         |1068          |99175             |1121      |
+        |3      |2022-03-07|2022-03-01|264         |192          |19320            |253      |1190         |1068          |99175             |1121      |
+        |3      |2022-03-14|2022-03-01|270         |253          |22658            |254      |1190         |1068          |99175             |1121      |
+        |3      |2022-03-21|2022-03-01|258         |300          |26533            |233      |1190         |1068          |99175             |1121      |
+        |3      |2022-03-28|2022-03-01|160         |181          |16878            |148      |1190         |1068          |99175             |1121      |
+        +-------+----------+----------+------------+-------------+-----------------+---------+-------------+--------------+------------------+----------+
         """
         self.logger.info("Staring collecting location zone aggregated datamart")
         job_start = datetime.now()
@@ -673,7 +706,11 @@ class SparkRunner:
         self.logger.debug("Collecing messages dataframe. Processing...")
 
         src_paths = self._get_src_paths(keeper=keeper, event_type="message")
-        messages_sdf = self.spark.read.parquet(*src_paths)
+        messages_sdf = (
+            self.spark.read.option("mergeSchema", "true")
+            .option("cacheMetadata", "true")
+            .parquet(*src_paths)
+        )
 
         messages_sdf = (
             messages_sdf.where(messages_sdf.message_from.isNotNull())
@@ -700,8 +737,8 @@ class SparkRunner:
 
         messages_sdf = (
             messages_sdf.withColumnRenamed("city_id", "zone_id")
-            .withColumn("week", f.weekofyear(f.col("msg_ts").cast("timestamp")))
-            .withColumn("month", f.month(f.col("msg_ts").cast("timestamp")))
+            .withColumn("week", f.trunc(f.col("msg_ts"), "week"))
+            .withColumn("month", f.trunc(f.col("msg_ts"), "month"))
             .groupby("month", "week", "zone_id")
             .agg(f.count("message_id").alias("week_message"))
             .withColumn(
@@ -710,13 +747,18 @@ class SparkRunner:
                     Window().partitionBy(f.col("zone_id"), f.col("month"))
                 ),
             )
+            .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
-        messages_sdf.show(100)  # todo delete this
 
         self.logger.debug("Collecing reacitons dataframe. Processing...")
 
         src_paths = self._get_src_paths(keeper=keeper, event_type="reaction")
         reaction_sdf = self.spark.read.parquet(*src_paths)
+        reaction_sdf = (
+            self.spark.read.option("mergeSchema", "true")
+            .option("cacheMetadata", "true")
+            .parquet(*src_paths)
+        )
 
         reaction_sdf = (
             reaction_sdf.select(
@@ -735,8 +777,8 @@ class SparkRunner:
         reaction_sdf = (
             reaction_sdf.withColumnRenamed("city_id", "zone_id")
             .where(f.col("event_lat").isNotNull())
-            .withColumn("week", f.weekofyear(f.col("datetime").cast("timestamp")))
-            .withColumn("month", f.month(f.col("datetime").cast("timestamp")))
+            .withColumn("week", f.trunc(f.col("datetime"), "week"))
+            .withColumn("month", f.trunc(f.col("datetime"), "month"))
             .groupby("month", "week", "zone_id")
             .agg(f.count("message_id").alias("week_reaction"))
             .withColumn(
@@ -745,13 +787,17 @@ class SparkRunner:
                     Window().partitionBy(f.col("zone_id"), f.col("month"))
                 ),
             )
+            .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
-        reaction_sdf.show(100)  # todo delete
 
         self.logger.debug("Collecing registrations dataframe. Processing...")
 
         src_paths = self._get_src_paths(keeper=keeper, event_type="message")
-        registrations_sdf = self.spark.read.parquet(*src_paths)
+        registrations_sdf = (
+            self.spark.read.option("mergeSchema", "true")
+            .option("cacheMetadata", "true")
+            .parquet(*src_paths)
+        )
 
         registrations_sdf = (
             registrations_sdf.where(registrations_sdf.message_from.isNotNull())
@@ -793,8 +839,8 @@ class SparkRunner:
         registrations_sdf = (
             registrations_sdf.withColumnRenamed("city_id", "zone_id")
             .where(f.col("event_lat").isNotNull())
-            .withColumn("week", f.weekofyear(f.col("msg_ts").cast("timestamp")))
-            .withColumn("month", f.month(f.col("msg_ts").cast("timestamp")))
+            .withColumn("week", f.trunc(f.col("msg_ts"), "week"))
+            .withColumn("month", f.trunc(f.col("msg_ts"), "month"))
             .groupby("month", "week", "zone_id")
             .agg(f.count("user_id").alias("week_user"))
             .withColumn(
@@ -803,14 +849,17 @@ class SparkRunner:
                     Window().partitionBy(f.col("zone_id"), f.col("month"))
                 ),
             )
+            .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
-
-        registrations_sdf.show(100)
 
         self.logger.debug("Collecing subscriptions dataframe. Processing...")
 
         src_paths = self._get_src_paths(keeper=keeper, event_type="subscription")
-        subscriptions_sdf = self.spark.read.parquet(*src_paths)
+        subscriptions_sdf = (
+            self.spark.read.option("mergeSchema", "true")
+            .option("cacheMetadata", "true")
+            .parquet(*src_paths)
+        )
 
         subscriptions_sdf = (
             subscriptions_sdf.select(
@@ -830,8 +879,8 @@ class SparkRunner:
         subscriptions_sdf = (
             subscriptions_sdf.withColumnRenamed("city_id", "zone_id")
             .where(f.col("event_lat").isNotNull())
-            .withColumn("week", f.weekofyear(f.col("datetime").cast("timestamp")))
-            .withColumn("month", f.month(f.col("datetime").cast("timestamp")))
+            .withColumn("week", f.trunc(f.col("datetime"), "week"))
+            .withColumn("month", f.trunc(f.col("datetime"), "month"))
             .groupby("month", "week", "zone_id")
             .agg(f.count("user_id").alias("week_subscription"))
             .withColumn(
@@ -840,9 +889,8 @@ class SparkRunner:
                     Window().partitionBy(f.col("zone_id"), f.col("month"))
                 ),
             )
+            .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
-
-        subscriptions_sdf.show(100)
 
         self.logger.debug("Joining dataframes")
 
@@ -866,12 +914,18 @@ class SparkRunner:
                 "month_user",
             )
         )
+        messages_sdf.unpersist()
+        reaction_sdf.unpersist()
+        registrations_sdf.unpersist()
+        subscriptions_sdf.unpersist()
+        del (messages_sdf, reaction_sdf, registrations_sdf, subscriptions_sdf)
+
         self.logger.info("Datamart collected!")
 
         self.logger.info("Writing results")
 
         processed_dt = datetime.strptime(
-            keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
+            keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S"
         ).date()
         OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
         try:
@@ -901,10 +955,15 @@ class SparkRunner:
         `keeper` : Arguments keeper object
 
         ## Examples
+        Lets initialize class object and start session:
         >>> spark = SparkRunner()
         >>> spark.init_session(app_name="testing-app", log4j_level="INFO")
-        >>> spark.collect_friend_recommendation_datamart(keeper=keeper) # saved results on s3
-        >>> sdf = spark.read.parquet(f"{keeper.tgt_path}") # reading saved results
+
+        Now we can execute class method that collects datamart:
+        >>> spark.collect_friend_recommendation_datamart(keeper=keeper)
+
+        And after that read saved results to see how it looks:
+        >>> sdf = spark.read.parquet(keeper.tgt_path)
         >>> sdf.printSchema()
         root
         |-- left_user: string (nullable = true)
@@ -916,18 +975,21 @@ class SparkRunner:
         self.logger.info("Starting collecting friend recommendations datamart")
         job_start = datetime.now()
 
-        src_paths = self._get_src_paths(keeper=keeper)
-        events_sdf = self.spark.read.parquet(*src_paths)
+        messages_src_paths = self._get_src_paths(keeper=keeper, event_type="message")
+        real_contacts_sdf = (
+            self.spark.read.option("mergeSchema", "true")
+            .option("cacheMetadata", "true")
+            .parquet(*messages_src_paths)
+        )
 
         self.logger.debug("Collecting dataframe with real contacts")
 
         # реальные контакты
         real_contacts_sdf = (
-            events_sdf.where(events_sdf.event_type == "message")
-            .where(events_sdf.event.message_to.isNotNull())
+            real_contacts_sdf.where(real_contacts_sdf.message_to.isNotNull())
             .select(
-                events_sdf.event.message_from.alias("message_from"),
-                events_sdf.event.message_to.alias("message_to"),
+                real_contacts_sdf.message_from,
+                real_contacts_sdf.message_to,
             )
             .withColumn(
                 "user_id",
@@ -941,18 +1003,27 @@ class SparkRunner:
             )
             .select("user_id", "contact_id")
             .distinct()
-            .repartitionByRange(92, "user_id", "contact_id")
+            # .repartition(92, "user_id", "contact_id")
+            # .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
 
         self.logger.debug("Collecting all users with subscriptions dataframe")
         #  все пользователи подписавшиеся на один из каналов (любой)
+        subscription_src_paths = self._get_src_paths(
+            keeper=keeper, event_type="subscription"
+        )
         subs_sdf = (
-            events_sdf.where(events_sdf.event_type == "subscription")
-            .where(events_sdf.event.subscription_channel.isNotNull())
-            .where(events_sdf.event.user.isNotNull())
+            self.spark.read.option("mergeSchema", "true")
+            .option("cacheMetadata", "true")
+            .parquet(*subscription_src_paths)
+        )
+
+        subs_sdf = (
+            subs_sdf.where(subs_sdf.subscription_channel.isNotNull())
+            .where(subs_sdf.user.isNotNull())
             .select(
-                events_sdf.event.subscription_channel.alias("subscription_channel"),
-                events_sdf.event.user.alias("user_id"),
+                subs_sdf.subscription_channel,
+                subs_sdf.user.alias("user_id"),
             )
             .drop_duplicates(subset=["user_id", "subscription_channel"])
         )
@@ -967,7 +1038,8 @@ class SparkRunner:
                 how="cross",
             )
             .where(f.col("left_user") != f.col("right_user"))
-            .repartitionByRange(92, "left_user", "right_user")
+            # .repartition(92, "left_user", "right_user")
+            # .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
 
         self.logger.debug("Excluding real contacts")
@@ -984,14 +1056,18 @@ class SparkRunner:
         self.logger.debug("Collecting last message coordinates dataframe")
         # все пользователи которые писали сообщения -> координаты последнего отправленого сообщения
         messages_sdf = (
-            events_sdf.where(events_sdf.event_type == "message")
-            .where(events_sdf.event.message_from.isNotNull())
+            self.spark.read.option("mergeSchema", "true")
+            .option("cacheMetadata", "true")
+            .parquet(*messages_src_paths)
+        )
+        messages_sdf = (
+            messages_sdf.where(messages_sdf.message_from.isNotNull())
             .select(
-                events_sdf.event.message_from.alias("user_id"),
-                events_sdf.event.message_ts.alias("message_ts"),
-                events_sdf.event.datetime.alias("datetime"),
-                events_sdf.lat.alias("event_lat"),
-                events_sdf.lon.alias("event_lon"),
+                messages_sdf.message_from.alias("user_id"),
+                messages_sdf.message_ts,
+                messages_sdf.datetime,
+                messages_sdf.lat.alias("event_lat"),
+                messages_sdf.lon.alias("event_lon"),
             )
             .withColumn(
                 "msg_ts",
@@ -1008,7 +1084,8 @@ class SparkRunner:
             .where(f.col("msg_ts") == f.col("last_msg_ts"))
             .select("user_id", "event_lat", "event_lon")
             .distinct()
-            .repartitionByRange(92, "user_id")
+            # .repartitionByRange(92, "user_id")
+            # .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
 
         self.logger.debug("Collecting coordinates for potential recomendations users")
@@ -1036,6 +1113,7 @@ class SparkRunner:
             .drop("user_id")
             .where(f.col("left_user_lat").isNotNull())
             .where(f.col("right_user_lat").isNotNull())
+            # .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
 
         sdf = self._compute_distance(
@@ -1074,38 +1152,37 @@ class SparkRunner:
 
         self.logger.info("Writing results")
 
-        processed_dt = datetime.strptime(
-            keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
-        ).date()
-        OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
-        try:
-            sdf.repartition(1).write.parquet(
-                path=OUTPUT_PATH,
-                mode="errorifexists",
-            )
-            self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
-        except Exception:
-            self.logger.warning(
-                "Notice that target path is already exists and will be overwritten!"
-            )
-            self.logger.info("Overwriting...")
-            sdf.repartition(1).write.parquet(
-                path=OUTPUT_PATH,
-                mode="overwrite",
-            )
-            self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
+        sdf.show(200, False)
+
+        sdf.printSchema()
+
+        # processed_dt = datetime.strptime(
+        #     keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
+        # ).date()
+        # OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
+        # try:
+        #     sdf.repartition(1).write.parquet(
+        #         path=OUTPUT_PATH,
+        #         mode="errorifexists",
+        #     )
+        #     self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
+        # except Exception:
+        #     self.logger.warning(
+        #         "Notice that target path is already exists and will be overwritten!"
+        #     )
+        #     self.logger.info("Overwriting...")
+        #     sdf.repartition(1).write.parquet(
+        #         path=OUTPUT_PATH,
+        #         mode="overwrite",
+        #     )
+        #     self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
 
         job_end = datetime.now()
         self.logger.info(f"Job execution time: {job_end - job_start}")
 
-    def testing(self, keeper: ArgsKeeper) -> None:  # todo delete this func
-        df = self._get_users_actual_data_dataframe(keeper=keeper)
+    def __move_data__(self):
+        "Moves data between DWH layers. This method not for public calling"
 
-        df.show(200)
-        df.printSchema()
-
-    def _move_data(self):
-        "Move data between DWH layers"
         job_start = datetime.now()
 
         df = (

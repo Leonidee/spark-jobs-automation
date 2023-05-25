@@ -1,39 +1,40 @@
 import sys
-from logging import getLogger
 from pathlib import Path
 
 from pyspark.sql.utils import AnalysisException, CapturedException
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from scripts.config import Config
-from scripts.logger import SparkLogger
-from scripts.runner import SparkRunner
-from scripts.utils import ArgsHolder
+from src.config import Config
+from src.logger import SparkLogger
+from src.runner import SparkRunner
+from src.utils import ArgsKeeper, SparkConfigKeeper
 
 config = Config()
 
-
-logger = (
-    getLogger("aiflow.task")
-    if config.IS_PROD
-    else SparkLogger(level=config.log_level).get_logger(
-        logger_name=str(Path(Path(__file__).name))
-    )
-)
+logger = SparkLogger(level=config.python_log_level).get_logger(logger_name=__name__)
 
 
 def main() -> None:
     try:
-        if len(sys.argv) > 6:
-            raise KeyError
+        DATE = str(sys.argv[1])
+        DEPTH = int(sys.argv[2])
+        SRC_PATH = str(sys.argv[3])
+        TGT_PATH = str(sys.argv[4])
+        PROCESSED_DTTM = str(sys.argv[5])
 
-        holder = ArgsHolder(
-            date=str(sys.argv[1]),
-            depth=int(sys.argv[2]),
-            src_path=str(sys.argv[3]),
-            tgt_path=str(sys.argv[4]),
-            processed_dttm=str(sys.argv[5]),
+        if len(sys.argv) > 6:
+            raise KeyError("Too many arguments for job submitting! Expected 5")
+
+        keeper = ArgsKeeper(
+            date=DATE,
+            depth=DEPTH,
+            src_path=SRC_PATH,
+            tgt_path=TGT_PATH,
+            processed_dttm=PROCESSED_DTTM,
+        )
+        conf = SparkConfigKeeper(
+            executor_memory="3000m", executor_cores=1, max_executors_num=12
         )
 
     except (IndexError, KeyError) as e:
@@ -42,16 +43,18 @@ def main() -> None:
     try:
         spark = SparkRunner()
         spark.init_session(
-            app_name=config.spark_application_name, log4j_level=config.log4j_level
+            app_name=config.get_spark_application_name,
+            spark_conf=conf,
+            log4j_level=config.log4j_level,  # type: ignore
         )
-        spark.compute_friend_recommendation_datamart(holder=holder)
+        spark.collect_friend_recommendation_datamart(keeper=keeper)
 
     except (CapturedException, AnalysisException) as e:
         logger.exception(e)
         sys.exit(1)
 
     finally:
-        spark.stop_session()
+        spark.stop_session()  # type: ignore
 
 
 if __name__ == "__main__":

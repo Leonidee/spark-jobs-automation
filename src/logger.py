@@ -4,14 +4,25 @@ import sys
 
 
 class SparkLogger(logging.Logger):
+    """Python Logger instance
+
+    ## Usage
+    >>> logger = SparkLogger(level="DEBUG").get_logger(logger_name=__name__)
+    >>> logger.info("This is a test!")
+    [2023-05-24 17:32:16] {__main__:4} INFO: This is a test!
+    """
+
     def __init__(self, level: str = "INFO"):
         self.level = level
 
     def get_logger(self, logger_name: str) -> logging.Logger:
-        """Return configured ready-for-use logger instance
+        """Returns configured ready-for-use logger instance
 
-        Args:
-            logger_name (str): Name of logger
+        ## Parameters
+        `logger_name` : Name of the logger
+
+        ## Returns
+        `logging.Logger` : Return Logger class object
         """
         logger = logging.getLogger(name=logger_name)
 
