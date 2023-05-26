@@ -3,6 +3,7 @@ from logging import getLogger
 from os import getenv
 from pathlib import Path
 from time import sleep
+from typing import Literal
 
 import requests
 from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeout
@@ -10,50 +11,81 @@ from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeo
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config
 from src.logger import SparkLogger
-from src.utils import load_environment
-
-config = Config()
-load_environment()
-
-logger = (
-    getLogger("aiflow.task")
-    if config.IS_PROD
-    else SparkLogger(level=config.python_log_level).get_logger(
-        logger_name=str(Path(Path(__file__).name))
-    )
-)
+from src.utils import EnvironManager
 
 
 class DataProcCluster:
+    """Class for manage DataProc Clusters. Sends requests to Yandex Cloud API.
+
+    ## Notes
+    To initialize Class instance you need to specify environment variables in `.env` project file or as a global environment variables. See `.env.template` for mote details.
+
+    At iinitializing moment gets IAM token to communicate to Yandex Cloud API.
+
+    If
+
+    ## Examples
+    Initialize Class instance:
+    >>> cluster = DataProcCluster()
+
+    Send request to start Cluster:
+    >>> cluster.exec_command(command="start")
+
+    If request was sent successfully we can check Cluster status:
+    >>> cluster.check_status(target_status="running")
+    ... [2023-05-26 12:51:20] {src.cluster:109} INFO: Sending request to execute Cluster command: start
+    ... [2023-05-26 12:51:21] {src.cluster:133} INFO: Sending request to check Cluster status. Target status: running
+    ... [2023-05-26 12:51:21] {src.cluster:156} INFO: Current cluster status is: STARTING
+    ... [2023-05-26 12:51:41] {src.cluster:156} INFO: Current cluster status is: STARTING
+    ... [2023-05-26 12:59:39] {src.cluster:160} INFO: Current cluster status is: RUNNING
+    ... [2023-05-26 12:59:39] {src.cluster:165} INFO: The target status has been reached!
+
+    We can change max attempts to check cluster status:
+    >>> cluster.max_attempts_to_check_status = 1
+    >>> cluster.check_status(target_status="stopped")
+    ... [2023-05-26 13:03:38] {src.cluster:140} INFO: Sending request to check Cluster status. Target status: stopped
+    ... [2023-05-26 13:03:39] {src.cluster:163} INFO: Current cluster status is: RUNNING
+    ... [2023-05-26 13:03:39] {src.cluster:173} ERROR: No more attemts left to check Cluster status! Cluster status is unknown.
+    """
+
     def __init__(
         self,
-        max_attempts_to_check_status: int = 10,
     ) -> None:
-        """
-        Instance for manage DataProc Clusters. Sends requests to Yandex Cloud API
-
-        Args:
-            max_attempts_to_check_status (int, optional): Max number of attempts to check if cluster running or stopped. Defaults to 10.
-        """
-        self.max_attempts_to_check_status = max_attempts_to_check_status
-        self.cluster_id = getenv("YC_DATAPROC_CLUSTER_ID")
-        self.base_url = getenv("YC_DATAPROC_BASE_URL")
-        self.token = self._get_iam_token()
-
+        config = Config()
+        env = EnvironManager()
+        env.load_environ()
         self.logger = (
             getLogger("aiflow.task")
             if config.IS_PROD
             else SparkLogger(level=config.python_log_level).get_logger(
-                logger_name=str(Path(Path(__file__).name))
+                logger_name=__name__
             )
         )
 
+        self.cluster_id = getenv("YC_DATAPROC_CLUSTER_ID")
+        self.base_url = getenv("YC_DATAPROC_BASE_URL")
+        self.token = self._get_iam_token()
+
+    @property
+    def max_attempts_to_check_status(self) -> int:
+        self._max_attempts_to_check_status = 10
+        return self._max_attempts_to_check_status
+
+    @max_attempts_to_check_status.setter
+    def max_attempts_to_check_status(self, value: int) -> None:
+        if not isinstance(value, int):
+            raise ValueError("value must be integer!")
+
+        self._max_attempts_to_check_status = value
+
     def _get_iam_token(self) -> str:
         """
-        Get IAM token to be able to work with the API
+        Gets IAM token to be able to communicate with Yandex Cloud API.
 
-        Returns:
-            str: IAM token
+        Used at the time of initialization class instance.
+
+        ## Returns
+        `str` : IAM token
         """
         OAUTH_TOKEN = getenv("YC_OAUTH_TOKEN")
 
@@ -83,16 +115,20 @@ class DataProcCluster:
             self.logger.exception(e)
             sys.exit(1)
 
-        return iam_token
+        return iam_token  # type: ignore
 
-    def start(self) -> None:
-        """Send request to start DataProc Cluster"""
-        self.logger.info("Starting Cluster")
+    def exec_command(self, command: Literal["start", "stop"]) -> None:
+        """Sends request to execute Cluster command.
+
+        ## Parameters
+        `command` : Command to execute
+        """
+        self.logger.info(f"Sending request to execute Cluster command: {command}")
 
         try:
-            self.logger.debug("Sending request to API")
+            self.logger.debug("Requesting...")
             response = requests.post(
-                url=f"{self.base_url}/{self.cluster_id}:start",
+                url=f"{self.base_url}/{self.cluster_id}:{command}",
                 headers={"Authorization": f"Bearer {self.token}"},
                 timeout=60 * 2,
             )
@@ -106,38 +142,31 @@ class DataProcCluster:
             self.logger.error(e)
             sys.exit(1)
 
-    def stop(self) -> None:
-        """Send request to stop DataProc Cluster"""
-        self.logger.info("Stopping Cluster")
-        try:
-            self.logger.debug("Sending request to API")
-            response = requests.post(
-                url=f"{self.base_url}/{self.cluster_id}:stop",
-                headers={"Authorization": f"Bearer {self.token}"},
-            )
-            response.raise_for_status()
+    def check_status(self, target_status: Literal["running", "stopped"]) -> None:
+        """Sends request to check current Cluster status.
 
-            if response.status_code == 200:
-                self.logger.debug("Response received")
-                self.logger.debug(f"API response: {response.json()}")
+        Waits until Cluster status will be equal to `target_status`.
 
-        except (HTTPError, InvalidSchema, ConnectionError) as e:
-            self.logger.error(e)
-            sys.exit(1)
+        ## Notes
+        If the target status is not reached after all attempts, the application is killed with the returning code 1.
 
-    def is_running(self) -> None:
-        """Send request to check current Cluster status. \n
-        Waits until cluster status will be `RUNNING`. \n
-        If current attempt greater then `max_attempts_to_check_status` attribute will exit with 1 status code
+        The default `max_attempts_to_check_status` attribute set to 10 (ten attempts with 60 secs pause between each)
+        You can change it like that:
+        >>> cluster.max_attempts_to_check_status = 2
+
+        ## Parameters
+        `target_status` : The target Cluster status
         """
-        self.logger.info("Requesting Cluster status...")
+        self.logger.info(
+            f"Sending request to check Cluster status. Target status: {target_status}"
+        )
 
-        is_active = False
+        is_target = False
         i = 1
 
-        while not is_active:
+        while not is_target:
             try:
-                self.logger.debug(f"Send request to API. Attempt: {i}")
+                self.logger.debug(f"Requesting... Attempt: {i}")
                 response = requests.get(
                     url=f"{self.base_url}/{self.cluster_id}",
                     headers={"Authorization": f"Bearer {self.token}"},
@@ -155,64 +184,17 @@ class DataProcCluster:
                     f"Current cluster status is: {response.get('status', 'unknown')}"
                 )
 
-                if response["status"].strip().lower() == "running":
-                    self.logger.info("Cluster is ready!")
-                    is_active = True
+                if response["status"].strip().lower() == target_status:
+                    self.logger.info("The target status has been reached!")
+                    is_target = True
 
-            if not is_active:
-                if i == self.max_attempts_to_check_status:
+            if not is_target:
+                if i == self._max_attempts_to_check_status:
                     self.logger.error(
                         "No more attemts left to check Cluster status! Cluster status is unknown."
                     )
                     sys.exit(1)
 
-                sleep(20)
-                self.logger.debug("Another attempt to check status")
-                i += 1
-
-    def is_stopped(self) -> None:
-        """Send request to Yandex API to check current Cluster status. \n
-        Waits until cluster status will be `STOPPED`. \n
-        If current attempt greater then `max_attempts_to_check_status` attribute will exit with 1 status code
-        """
-
-        self.logger.info("Requesting Cluster status...")
-
-        is_stopped = False
-        i = 1
-
-        while not is_stopped:
-            try:
-                self.logger.debug(f"Send request to API. Attempt: {i}")
-                response = requests.get(
-                    url=f"{self.base_url}/{self.cluster_id}",
-                    headers={"Authorization": f"Bearer {self.token}"},
-                )
-                response.raise_for_status()
-            except (HTTPError, InvalidSchema, ConnectionError) as e:
-                self.logger.error(e)
-                sys.exit(1)
-
-            if response.status_code == 200:
-                response = response.json()
-                self.logger.debug(f"API response: {response}")
-
-                self.logger.info(
-                    f"Current cluster status is: {response.get('status', 'unknown')}"
-                )
-
-                if response["status"].strip().lower() == "stopped":
-                    self.logger.info("Cluster is stopped!")
-
-                    is_stopped = True
-
-            if not is_stopped:
-                if i == self.max_attempts_to_check_status:
-                    self.logger.error(
-                        "No more attemts left to check Cluster status! Cluster status is unknown."
-                    )
-                    sys.exit(1)
-
-                sleep(20)
+                sleep(60)
                 self.logger.debug("Another attempt to check status")
                 i += 1

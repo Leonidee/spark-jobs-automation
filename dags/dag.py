@@ -3,9 +3,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 # airflow
-from airflow.decorators import dag, task
-from airflow.models.baseoperator import chain
-from airflow.operators.empty import EmptyOperator
+from airflow.decorators import dag, task  # type: ignore
+from airflow.models.baseoperator import chain  # type: ignore
+from airflow.operators.empty import EmptyOperator  # type: ignore
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
@@ -13,25 +13,12 @@ from src.cluster import DataProcCluster
 from src.config import Config
 from src.notifyer import TelegramNotifyer
 from src.submitter import SparkSubmitter
-from src.utils import TagsJobArgsHolder
+from src.utils import ArgsKeeper
 
 config = Config()
-
-tags_job_args = TagsJobArgsHolder(
-    date=str(datetime.today().date()),
-    depth=7,
-    threshold=50,
-    tags_verified_path=config.tags_job_config["TAGS_VERIFIED_PATH"],
-    src_path=config.tags_job_config["SRC_PATH"],
-    tgt_path=config.tags_job_config["TGT_PATH"],
-)
-
 notifyer = TelegramNotifyer()
-
-cluster = DataProcCluster(
-    max_attempts_to_check_status=20,
-)
-spark = SparkSubmitter()
+cluster = DataProcCluster()
+submitter = SparkSubmitter()
 
 
 @task(
@@ -43,7 +30,7 @@ spark = SparkSubmitter()
 )
 def start_cluster() -> None:
     "Start DataProc Cluster"
-    cluster.start()
+    cluster.exec_command(command="start")
 
 
 @task(
@@ -55,7 +42,7 @@ def start_cluster() -> None:
 )
 def wait_until_cluster_running() -> None:
     "Wait until Cluster is ready to use"
-    cluster.is_running()
+    cluster.check_status(target_status="running")
 
 
 @task(
@@ -65,10 +52,16 @@ def wait_until_cluster_running() -> None:
         "on_failure_callback": notifyer.notify_on_task_failure,
     }
 )
-def submit_tags_job_for_7d() -> None:
-    "Submit tags job for 7 days"
+def submit_users_info_datamart_job() -> None:
+    keeper = ArgsKeeper(
+        date=config.get_users_info_datamart_config["DATE"],
+        depth=config.get_users_info_datamart_config["DEPTH"],
+        src_path=config.get_users_info_datamart_config["SRC_PATH"],
+        tgt_path=config.get_users_info_datamart_config["TGT_PATH"],
+        processed_dttm=datetime.now().strftime("%Y-%m-%d %H:%M:%S").replace(" ", "T"),  # type: ignore
+    )
 
-    spark.submit_tags_job(holder=tags_job_args)
+    submitter.submit_job(job="users_info_datamart_job", keeper=keeper)
 
 
 @task(
@@ -78,12 +71,35 @@ def submit_tags_job_for_7d() -> None:
         "on_failure_callback": notifyer.notify_on_task_failure,
     }
 )
-def submit_tags_job_for_60d() -> None:
-    "Submit tags job for 60 days"
-    tags_job_args.depth = 60
-    tags_job_args.threshold = 200
+def submit_location_zone_agg_datamart_job() -> None:
+    keeper = ArgsKeeper(
+        date=config.get_location_zone_agg_datamart_config["DATE"],
+        depth=config.get_location_zone_agg_datamart_config["DEPTH"],
+        src_path=config.get_location_zone_agg_datamart_config["SRC_PATH"],
+        tgt_path=config.get_location_zone_agg_datamart_config["TGT_PATH"],
+        processed_dttm=datetime.now().strftime("%Y-%m-%d %H:%M:%S").replace(" ", "T"),  # type: ignore
+    )
 
-    spark.submit_tags_job(tags_job_args)
+    submitter.submit_job(job="location_zone_agg_datamart_job", keeper=keeper)
+
+
+@task(
+    default_args={
+        "retries": 3,
+        "retry_delay": timedelta(seconds=45),
+        "on_failure_callback": notifyer.notify_on_task_failure,
+    }
+)
+def submit_friend_recommendation_datamart_job() -> None:
+    keeper = ArgsKeeper(
+        date=config.get_friend_recommendation_datamart_config["DATE"],
+        depth=config.get_friend_recommendation_datamart_config["DEPTH"],
+        src_path=config.get_friend_recommendation_datamart_config["SRC_PATH"],
+        tgt_path=config.get_friend_recommendation_datamart_config["TGT_PATH"],
+        processed_dttm=datetime.now().strftime("%Y-%m-%d %H:%M:%S").replace(" ", "T"),  # type: ignore
+    )
+
+    submitter.submit_job(job="friend_recommendation_datamart_job", keeper=keeper)
 
 
 @task(
@@ -96,7 +112,7 @@ def submit_tags_job_for_60d() -> None:
 )
 def stop_cluster_success_way() -> None:
     "Stop Cluster if every of upstream tasks successfully executed, if not - skipped"
-    cluster.stop()
+    cluster.exec_command(command="stop")
 
 
 @task(
@@ -109,7 +125,7 @@ def stop_cluster_success_way() -> None:
 )
 def stop_cluster_failed_way() -> None:
     "Stop Cluster if one of the upstream tasks failed, if not - skipped"
-    cluster.stop()
+    cluster.exec_command(command="stop")
 
 
 @task(
@@ -122,18 +138,18 @@ def stop_cluster_failed_way() -> None:
 )
 def wait_until_cluster_stopped() -> None:
     "Wait until Cluster is stopped"
-    cluster.is_stopped()
+    cluster.check_status(target_status="stopped")
 
 
 @dag(
-    dag_id="tags-job",
+    dag_id="datamart-collector-dag",
     schedule="0 2 * * *",
     start_date=datetime(2023, 4, 3),
     catchup=False,
     is_paused_upon_creation=True,
-    tags=["spark"],
+    tags=["spark", "de-dataproc-06"],
     default_args={
-        "owner": "leonide",
+        "owner": "@leonidgrishenkov",
     },
     default_view="grid",
 )
@@ -143,8 +159,9 @@ def taskflow() -> None:
     start = start_cluster()
     is_running = wait_until_cluster_running()
 
-    job_7d = submit_tags_job_for_7d()
-    job_60d = submit_tags_job_for_60d()
+    user_info = submit_users_info_datamart_job()
+    location_zone_agg = submit_location_zone_agg_datamart_job()
+    friend_reco = submit_friend_recommendation_datamart_job()
 
     stop_if_failed = stop_cluster_failed_way()
     stop_if_success = stop_cluster_success_way()
@@ -157,8 +174,9 @@ def taskflow() -> None:
         begin,
         start,
         is_running,
-        job_7d,
-        job_60d,
+        user_info,
+        location_zone_agg,
+        friend_reco,
         [stop_if_failed, stop_if_success],
         is_stopped,
         end,

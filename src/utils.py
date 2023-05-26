@@ -61,7 +61,7 @@ class ArgsKeeper(BaseModel):
     ...     )
     ... except ValidationError as e:
     ...     logger.error(e)
-    [2023-05-26 11:12:23] {__main__:56} ERROR: 1 validation error for ArgsKeeper
+    [2023-05-26 11:12:23] {src.utils:56} ERROR: 1 validation error for ArgsKeeper
     processed_dttm
         must be '%Y-%m-%dT%H:%M:%S' format (type=value_error)
     """
@@ -155,36 +155,3 @@ class EnvironManager:
 
         self.logger.debug("Environ loaded")
         return True
-
-
-# class SparkArgsValidator:
-#     def __init__(self):
-#         ...
-
-#     def validate_tags_job_args(self, holder: ArgsKeeper) -> None:
-#         "Validate given arguments in `TagsJobArgsHolder` object"
-
-#         logger.info("Validating `TagsJobArgsHolder`")
-
-#         if not re.match(pattern="^\d*$", string=str(holder.depth)):
-#             raise AssertionError(
-#                 f"`depth` must be int or str(int) type. For example: 5 or '5'. Not `{holder.depth}`"
-#             )
-
-#         if not re.match(pattern="^\d*$", string=str(holder.threshold)):
-#             raise AssertionError(
-#                 f"`threshold` must be int or str(int) type. For example: 200 or '200'. Not `{holder.threshold}`"
-#             )
-
-#         if not re.match(pattern="^\d{4}-\d{2}-\d{2}$", string=holder.date):
-#             raise AssertionError(
-#                 f"`date` arg format must be like: `YYYY-MM-DD`. For example: `2022-01-01`. Not `{holder.date}`"
-#             )
-
-#         if int(holder.depth) > 150:
-#             raise AssertionError("`depth` must be lower that 150")
-
-#         if int(holder.threshold) > 5_000:
-#             raise AssertionError("`threshold` must be lower that 5_000")
-
-#         logger.info("Validation passed")
