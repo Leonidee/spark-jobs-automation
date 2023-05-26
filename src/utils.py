@@ -26,9 +26,6 @@ class SparkConfigKeeper(BaseModel):
     max_executors_num: int
 
 
-"Dataclass for keeping Spark job parameters" ""
-
-
 class ArgsKeeper(BaseModel):
     """Dataclass for keeping and validating Spark job parameters
 
@@ -50,7 +47,8 @@ class ArgsKeeper(BaseModel):
     ...     tgt_path="s3a://data-ice-lake-05/messager-data/analytics/tmp",
     ...     processed_dttm="2023-05-22T12:03:25",
     ... )
-    If validation dont pass:
+
+    If validation don't pass:
     >>> try:
     ...     keeper = ArgsKeeper(
     ...         date="2022-04-03",

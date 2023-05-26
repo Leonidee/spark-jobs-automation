@@ -161,7 +161,7 @@ def taskflow() -> None:
 
     user_info = submit_users_info_datamart_job()
     location_zone_agg = submit_location_zone_agg_datamart_job()
-    friend_reco = submit_friend_recommendation_datamart_job()
+    # friend_reco = submit_friend_recommendation_datamart_job()
 
     stop_if_failed = stop_cluster_failed_way()
     stop_if_success = stop_cluster_success_way()
@@ -176,7 +176,7 @@ def taskflow() -> None:
         is_running,
         user_info,
         location_zone_agg,
-        friend_reco,
+        # friend_reco,
         [stop_if_failed, stop_if_success],
         is_stopped,
         end,

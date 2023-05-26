@@ -2,7 +2,7 @@ import sys
 from logging import getLogger
 from os import getenv
 from pathlib import Path
-from typing import Literal, overload
+from typing import Literal
 
 from requests import post
 from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeout

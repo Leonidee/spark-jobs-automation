@@ -12,7 +12,7 @@ from botocore.exceptions import ClientError
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config
 from src.logger import SparkLogger
-from src.utils import EnvironManager  # SparkArgsValidator,
+from src.utils import EnvironManager
 from src.utils import ArgsKeeper, SparkConfigKeeper
 
 os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
@@ -66,7 +66,6 @@ class SparkRunner:
         self.logger = SparkLogger(level=config.python_log_level).get_logger(
             logger_name=__name__
         )
-        # self.validator = SparkArgsValidator()  # ? delete? rewrite?
 
     def _get_s3_instance(self):
         "Get ready-to-use boto3 S3 connection instance"
