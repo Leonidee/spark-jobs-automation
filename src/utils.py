@@ -71,30 +71,37 @@ class ArgsKeeper(BaseModel):
     processed_dttm: str = None  # type: ignore
 
     @validator("date")
-    def validate_date(cls, v) -> None:
+    def validate_date(cls, v) -> str:
         if not re.match(pattern=r"^\d{4}-\d{2}-\d{2}$", string=v):
             raise ValueError("must be '%Y-%m-%d' format")
+        return v
 
     @validator("depth")
-    def validate_depth(cls, v) -> None:
+    def validate_depth(cls, v) -> int:
         if v > 150:
             raise ValueError("must be lower than 150")
+        if v < 0:
+            raise ValueError("must be positive")
+        return v
 
     @validator("src_path")
-    def validate_src_path(cls, v) -> None:
+    def validate_src_path(cls, v) -> str:
         if "s3" not in v:
             raise ValueError("must be only s3 paths")
+        return v
 
     @validator("tgt_path")
-    def validate_tgt_path(cls, v) -> None:
+    def validate_tgt_path(cls, v) -> str:
         if "s3" not in v:
             raise ValueError("must be only s3 paths")
+        return v
 
     @validator("processed_dttm")
-    def validate_processed_dttm(cls, v) -> None:
+    def validate_processed_dttm(cls, v) -> str:
         if v is not None:
             if not re.match(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", string=v):
                 raise ValueError("must be '%Y-%m-%dT%H:%M:%S' format")
+        return v
 
 
 class EnvironManager:
