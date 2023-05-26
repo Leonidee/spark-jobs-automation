@@ -11,29 +11,47 @@ from src.utils import ArgsKeeper
 
 app = FastAPI()
 
+SPARK_SUBMIT_PATH = "/usr/bin/spark-submit"
+PROJECT_PATH = Path(__file__).parent
 
-@app.post("/submit_tags_job")
-def submit_tags_job(holder: TagsJobArgsHolder):
+
+@app.post("/submit_users_info_datamart_job")
+def submit_users_info_datamart_job(keeper: ArgsKeeper):
     CMD = [
-        "/usr/bin/spark-submit",
-        "/home/ubuntu/code/spark-jobs-automation/jobs/tags_job.py",
-        holder.date,
-        str(holder.depth),
-        str(holder.threshold),
-        holder.tags_verified_path,
-        holder.src_path,
-        holder.tgt_path,
+        SPARK_SUBMIT_PATH,
+        f"{PROJECT_PATH}/jobs/users_info_datamart_job.py",
+        keeper.date,
+        str(keeper.depth),
+        keeper.src_path,
+        keeper.tgt_path,
+        keeper.processed_dttm,
     ]
     output = subprocess.run(args=CMD, capture_output=True, text=True, encoding="utf-8")
 
     return output
 
 
-@app.post("/submit_users_info_datamart_job")
-def submit_users_info_datamart_job(keeper: ArgsKeeper):
+@app.post("/submit_location_zone_agg_datamart_job")
+def submit_location_zone_agg_datamart_job(keeper: ArgsKeeper):
     CMD = [
-        "/usr/bin/spark-submit",
-        "/home/ubuntu/code/spark-jobs-automation/jobs/users_info_datamart_job.py",
+        SPARK_SUBMIT_PATH,
+        f"{PROJECT_PATH}/jobs/location_zone_agg_datamart_job.py",
+        keeper.date,
+        str(keeper.depth),
+        keeper.src_path,
+        keeper.tgt_path,
+        keeper.processed_dttm,
+    ]
+    output = subprocess.run(args=CMD, capture_output=True, text=True, encoding="utf-8")
+
+    return output
+
+
+@app.post("/submit_friend_recommendation_datamart_job")
+def submit_friend_recommendation_datamart_job(keeper: ArgsKeeper):
+    CMD = [
+        SPARK_SUBMIT_PATH,
+        f"{PROJECT_PATH}/jobs/friend_recommendation_datamart_job.py",
         keeper.date,
         str(keeper.depth),
         keeper.src_path,

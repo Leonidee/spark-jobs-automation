@@ -190,12 +190,10 @@ class SparkRunner:
             .appName(app_name)
             .getOrCreate()
         )
-        self.logger.info(
-            "Spark job properties:\n"
-            f"\tspark.executor.memory: {spark_conf.executor_memory}\n"
-            f"\tpark.executor.cores: {spark_conf.executor_cores}\n"
-            f"\tspark.dynamicAllocation.maxExecutors: {spark_conf.max_executors_num}"
-        )
+        s = "".join(
+            f"\t{i[0]}: {i[1]}\n" for i in spark_conf
+        )  # for print job config in logs
+        self.logger.info("Spark job properties:\n" + s)
 
         self.spark.sparkContext.setLogLevel(log4j_level)
 

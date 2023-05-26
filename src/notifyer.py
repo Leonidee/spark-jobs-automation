@@ -39,7 +39,7 @@ class TelegramNotifyer:
         self.bot_token = getenv("TG_BOT_TOKEN")
 
     def notify_on_task_failure(self, context: dict) -> None:
-        """This function is designed to be used in the Airflow ecosystem and should be called from default_args on_failure_callback argument of either a DAG or Airflow task.
+        """This function is designed to be used in the Airflow ecosystem and should be called from `default_args` `on_failure_callback` argument of either a DAG or Airflow task.
 
         The function is responsible for handling failures that occur during task execution.
 

@@ -38,7 +38,7 @@ class Config:
 
     @property
     def IS_PROD(self) -> bool:
-        return self._is_prod
+        return self._is_prod  # type: ignore
 
     @IS_PROD.setter
     def IS_PROD(self, value: bool) -> None:

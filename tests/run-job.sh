@@ -3,6 +3,7 @@
 # The only argument is name of job.
 # "job" means one of the python files in `jobs` folder
 
+
 date="2022-04-26"
 depth=62
 src_path="s3a://data-ice-lake-05/messager-data/analytics/geo-events"
