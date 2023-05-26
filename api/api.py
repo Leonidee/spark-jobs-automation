@@ -7,12 +7,12 @@ from fastapi import FastAPI
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.utils import ArgsKeeper
+from src.datamodel import ArgsKeeper
 
 app = FastAPI()
 
 SPARK_SUBMIT_PATH = "/usr/bin/spark-submit"
-PROJECT_PATH = Path(__file__).parent
+PROJECT_PATH = str(Path(__file__).parent.parent)
 
 
 @app.post("/submit_users_info_datamart_job")

@@ -12,8 +12,8 @@ from botocore.exceptions import ClientError
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config
 from src.logger import SparkLogger
-from src.utils import EnvironManager
-from src.utils import ArgsKeeper, SparkConfigKeeper
+from src.environ import EnvironManager
+from src.datamodel import ArgsKeeper, SparkConfigKeeper
 
 os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
 os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"

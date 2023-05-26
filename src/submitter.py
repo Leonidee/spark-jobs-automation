@@ -10,8 +10,8 @@ from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeo
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config
 from src.logger import SparkLogger
-from src.utils import EnvironManager
-from src.utils import ArgsKeeper
+from src.environ import EnvironManager
+from src.datamodel import ArgsKeeper
 
 
 class SparkSubmitter:
