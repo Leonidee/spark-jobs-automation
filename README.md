@@ -1,6 +1,6 @@
 # About
 
-![pipeline-3](https://github.com/Leonidee/spark-jobs-automation/blob/master/images/pipeline-3.png?raw=true)
+![pipeline](https://github.com/Leonidee/spark-jobs-automation/blob/master/images/pipeline.png?raw=true)
 
 The goal of this project is to implement an approach for ad-hoc scheduling of Spark jobs, with minimal infrastructure deployment costs.
 
@@ -11,14 +11,6 @@ A Restful service has been deployed inside the cluster using Fast API and Uvicor
 Once the infrastructure deployment is successful, Airflow sends a request to the Cluster to submit the Spark job. Spark processes the data and saves the results to S3. After processing is complete, the cluster API sends a summary of the results to Airflow.
 
 After receiving a response from the Cluster, regardless of the success of the job execution, Airflow sends a request to the Yandex API to stop the cluster.
-
-If all tasks have been executed successfully:
-
-![dag-success](https://github.com/Leonidee/spark-jobs-automation/blob/master/images/dag-success.png?raw=true)
-
-Or if one of them failed:
-
-![dag-failed](https://github.com/Leonidee/spark-jobs-automation/blob/master/images/dag-failed.png?raw=true)
 
 # Technology and Architecture
 
