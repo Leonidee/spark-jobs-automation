@@ -2,7 +2,7 @@ import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, List, Literal
+from typing import List, Literal
 
 import boto3
 import findspark
@@ -72,7 +72,7 @@ class SparkRunner:
 
         self.logger.debug("Getting s3 connection instace")
 
-        s3 = boto3.session.Session().client(
+        s3 = boto3.session.Session().client(  # type: ignore
             service_name="s3",
             endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
