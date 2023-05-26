@@ -1,9 +1,0 @@
-{
-    "editor.tokenColorCustomizations": {
-        "comments": "",
-        "textMateRules": []
-    },
-    "customizeUI.font.monospace": "JetBrain Mono",
-    "customizeUI.font.regular": "JetBrain Mono",
-    "customizeUI.titleBar": "frameless"
-}
