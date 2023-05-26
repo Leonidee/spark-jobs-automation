@@ -22,8 +22,6 @@ class DataProcCluster:
 
     At iinitializing moment gets IAM token to communicate to Yandex Cloud API.
 
-    If
-
     ## Examples
     Initialize Class instance:
     >>> cluster = DataProcCluster()
@@ -48,9 +46,7 @@ class DataProcCluster:
     ... [2023-05-26 13:03:39] {src.cluster:173} ERROR: No more attemts left to check Cluster status! Cluster status is unknown.
     """
 
-    def __init__(
-        self,
-    ) -> None:
+    def __init__(self, max_attempts_to_check_status: int = 10) -> None:
         config = Config()
         env = EnvironManager()
         env.load_environ()
@@ -65,18 +61,38 @@ class DataProcCluster:
         self.cluster_id = getenv("YC_DATAPROC_CLUSTER_ID")
         self.base_url = getenv("YC_DATAPROC_BASE_URL")
         self.token = self._get_iam_token()
+        self._max_attempts_to_check_status = max_attempts_to_check_status
 
     @property
     def max_attempts_to_check_status(self) -> int:
-        self._max_attempts_to_check_status = 10
+        """
+        Max attempts to check Cluster status, defaults 10. Must be lower than 20.
+
+        Between each attempt will pause on 60 seconds.
+
+        ## Examples
+        You can change attribute this way:
+        >>> cluster.max_attempts_to_check_status = 2
+        """
         return self._max_attempts_to_check_status
 
     @max_attempts_to_check_status.setter
     def max_attempts_to_check_status(self, value: int) -> None:
         if not isinstance(value, int):
-            raise ValueError("value must be integer!")
+            raise ValueError("value must be integer")
+
+        if value > 20:
+            raise ValueError("value must be lower than 20")
+
+        if value < 0:
+            raise ValueError("value must be positive")
 
         self._max_attempts_to_check_status = value
+
+    @max_attempts_to_check_status.deleter
+    def max_attempts_to_check_status(self) -> None:
+        "Resets to default value"
+        self._max_attempts_to_check_status = 10
 
     def _get_iam_token(self) -> str:
         """
