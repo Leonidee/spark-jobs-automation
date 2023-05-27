@@ -1,6 +1,7 @@
 #!/usr/bin/bash
-# This is a scrpit for testing spark-submit operation on cluster side.
-# The only argument is name of job.
+# this is a scrpit for testing spark-submit operation on cluster side
+# in manual mode only, not for automate testing
+# the only argument is name of job
 # "job" means one of the python files in `jobs` folder
 
 
