@@ -10,11 +10,11 @@ from airflow.operators.empty import EmptyOperator  # type: ignore
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.cluster import DataProcCluster
-from src.config import Config
-from src.notifyer import TelegramNotifyer
-from src.submitter import SparkSubmitter
-from src.datamodel import ArgsKeeper
+from src.cluster.cluster import DataProcCluster
+from src.config.config import Config
+from src.utils.notifyer import TelegramNotifyer
+from src.submitter.submitter import SparkSubmitter
+from src.datamodel.datamodel import ArgsKeeper
 
 notifyer = TelegramNotifyer()
 logger = getLogger("aiflow.task")

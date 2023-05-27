@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent.parent))
-from src.logger import SparkLogger
+sys.path.append(str(Path(__file__).parent.parent.parent))
+from src.utils.logger import SparkLogger
 from src.config import Config
 
 

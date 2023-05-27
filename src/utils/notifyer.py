@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 from datetime import datetime
 from logging import getLogger
@@ -8,10 +10,10 @@ import requests
 from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeout
 
 # package
-sys.path.append(str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
-from src.logger import SparkLogger
-from src.environ import EnvironManager
+from src.utils.logger import SparkLogger
+from src.utils.environ import EnvironManager
 
 
 class TelegramNotifyer:

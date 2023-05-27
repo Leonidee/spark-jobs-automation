@@ -6,8 +6,8 @@ from pyspark.sql.utils import AnalysisException, CapturedException
 # package
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config
-from src.logger import SparkLogger
-from src.runner import SparkRunner
+from src.utils import SparkLogger
+from src.spark import SparkRunner
 from src.datamodel import ArgsKeeper, SparkConfigKeeper
 
 config = Config()

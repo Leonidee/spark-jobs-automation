@@ -4,7 +4,11 @@ from pathlib import Path
 import pytest
 
 sys.path.append(str(Path(__file__).parent.parent))
-from src.datamodel import SparkArgsValidator, TagsJobArgsHolder, load_environment
+from src.datamodel.datamodel import (
+    SparkArgsValidator,
+    TagsJobArgsHolder,
+    load_environment,
+)
 
 spark_validator = SparkArgsValidator()
 

@@ -1,19 +1,19 @@
+from __future__ import annotations
+
 import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Literal
 
 import boto3
 import findspark
 from botocore.exceptions import ClientError
 
 # package
-sys.path.append(str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
-from src.logger import SparkLogger
-from src.environ import EnvironManager
-from src.datamodel import ArgsKeeper, SparkConfigKeeper
+from src.utils import SparkLogger
+from src.utils import EnvironManager
 
 os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
 os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
@@ -25,8 +25,15 @@ findspark.init()
 findspark.find()
 
 import pyspark.sql.functions as f
-from pyspark.sql import DataFrame, SparkSession, Window
+from pyspark.sql import SparkSession, Window
 from pyspark.storagelevel import StorageLevel
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import List, Literal
+    from pyspark.sql import DataFrame
+    from src.datamodel import ArgsKeeper, SparkConfigKeeper
 
 
 class SparkRunner:

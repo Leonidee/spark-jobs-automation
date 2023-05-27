@@ -1,9 +1,11 @@
-import logging
-import coloredlogs
+from __future__ import annotations
+
+from logging import Logger, getLogger, StreamHandler
+from coloredlogs import ColoredFormatter, install
 import sys
 
 
-class SparkLogger(logging.Logger):
+class SparkLogger(Logger):
     """Python Logger instance.
 
     ## Notes
@@ -15,13 +17,13 @@ class SparkLogger(logging.Logger):
 
     Common usage:
     >>> logger.info("This is a test!")
-    [2023-05-24 17:32:16] {__main__:4} INFO: This is a test!
+    [2023-05-24 17:32:16] {src.utils.environ:4} INFO: This is a test!
     """
 
     def __init__(self, level: str = "INFO"):
         self.level = level  # type: ignore
 
-    def get_logger(self, logger_name: str) -> logging.Logger:
+    def get_logger(self, logger_name: str) -> Logger:
         """Returns configured ready-for-use logger instance
 
         ## Parameters
@@ -30,17 +32,17 @@ class SparkLogger(logging.Logger):
         ## Returns
         `logging.Logger` : Returns Logger class object
         """
-        logger = logging.getLogger(name=logger_name)
+        logger = getLogger(name=logger_name)
 
-        coloredlogs.install(logger=logger, level=self.level)
+        install(logger=logger, level=self.level)
         logger.setLevel(level=self.level)
 
         if logger.hasHandlers():
             logger.handlers.clear()
 
-        logger_handler = logging.StreamHandler(stream=sys.stdout)
+        logger_handler = StreamHandler(stream=sys.stdout)
 
-        colored_formatter = coloredlogs.ColoredFormatter(
+        colored_formatter = ColoredFormatter(
             fmt="[%(asctime)s] {%(name)s:%(lineno)d} %(levelname)s: %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
             level_styles=dict(

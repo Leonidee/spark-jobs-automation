@@ -7,8 +7,8 @@ from requests.exceptions import HTTPError
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.cluster import DataProcCluster
-from src.config import Config
+from src.cluster.cluster import DataProcCluster
+from src.config.config import Config
 
 config = Config()
 

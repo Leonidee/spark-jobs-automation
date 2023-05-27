@@ -1,17 +1,24 @@
+from __future__ import annotations
+
 import sys
 from logging import getLogger
 from os import getenv
 from pathlib import Path
-from typing import Literal
+
+from typing import TYPE_CHECKING
+
 
 from requests import post
 from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeout
 
-sys.path.append(str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
-from src.logger import SparkLogger
-from src.environ import EnvironManager
-from src.datamodel import ArgsKeeper
+from src.utils import SparkLogger
+from src.utils import EnvironManager
+
+if TYPE_CHECKING:
+    from typing import Literal
+    from src.datamodel import ArgsKeeper
 
 
 class SparkSubmitter:

@@ -7,8 +7,8 @@ from requests.exceptions import HTTPError
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.config import Config
-from src.submitter import SparkSubmitter
+from src.config.config import Config
+from src.submitter.submitter import SparkSubmitter
 from src.utils import TagsJobArgsHolder
 
 spark = SparkSubmitter()

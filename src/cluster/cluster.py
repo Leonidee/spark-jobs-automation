@@ -1,17 +1,50 @@
+from __future__ import annotations
+
 import sys
 from logging import getLogger
 from os import getenv
 from pathlib import Path
 from time import sleep
-from typing import Literal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Literal
 
 import requests
 from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeout
 
-sys.path.append(str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
-from src.logger import SparkLogger
-from src.environ import EnvironManager
+from src.utils import SparkLogger
+from src.utils import EnvironManager
+
+
+class DataProcClusterError(Exception):
+    ...
+
+
+class YandexAPIError(DataProcClusterError):
+    """Test
+
+    ## Parameters
+    `DataProcClusterError` : _description_
+    """
+
+    def __init__(self, msg) -> None:
+        """TEst"""
+        super().__init__(msg)
+
+    def retry(self, max_retries: int = 3, delay: int = 10) -> None:
+        retries = 0
+        while retries < max_retries:
+            try:
+                print(retries)
+                raise Exception
+            except Exception:
+                retries += 1
+                sleep(delay)
+
+        raise self
 
 
 class DataProcCluster:
@@ -60,8 +93,9 @@ class DataProcCluster:
 
         self.cluster_id = getenv("YC_DATAPROC_CLUSTER_ID")
         self.base_url = getenv("YC_DATAPROC_BASE_URL")
+        self.oauth_token = getenv("YC_OAUTH_TOKEN")
         self.token = self._get_iam_token()
-        self._max_attempts_to_check_status = max_attempts_to_check_status
+        self._max_attempts = max_attempts_to_check_status
 
     @property
     def max_attempts_to_check_status(self) -> int:
@@ -74,7 +108,7 @@ class DataProcCluster:
         You can change attribute this way:
         >>> cluster.max_attempts_to_check_status = 2
         """
-        return self._max_attempts_to_check_status
+        return self._max_attempts
 
     @max_attempts_to_check_status.setter
     def max_attempts_to_check_status(self, value: int) -> None:
@@ -87,12 +121,12 @@ class DataProcCluster:
         if value < 0:
             raise ValueError("value must be positive")
 
-        self._max_attempts_to_check_status = value
+        self._max_attempts = value
 
     @max_attempts_to_check_status.deleter
     def max_attempts_to_check_status(self) -> None:
         "Resets to default value"
-        self._max_attempts_to_check_status = 10
+        self._max_attempts = 10
 
     def _get_iam_token(self) -> str:
         """
@@ -103,7 +137,6 @@ class DataProcCluster:
         ## Returns
         `str` : IAM token
         """
-        OAUTH_TOKEN = getenv("YC_OAUTH_TOKEN")
 
         self.logger.debug("Getting Yandex Cloud IAM token")
 
@@ -111,7 +144,7 @@ class DataProcCluster:
             self.logger.debug("Send request to API")
             response = requests.post(
                 url="https://iam.api.cloud.yandex.net/iam/v1/tokens",
-                json={"yandexPassportOauthToken": OAUTH_TOKEN},
+                json={"yandexPassportOauthToken": self.oauth_token},
                 timeout=60 * 2,
             )
             response.raise_for_status()
@@ -124,8 +157,7 @@ class DataProcCluster:
                     iam_token = response["iamToken"]
                     self.logger.debug("IAM token collected!")
                 else:
-                    self.logger.error("There is no IAM token in API response!")
-                    sys.exit(1)
+                    raise YandexAPIError("There is no IAM token in API response!")
 
         except (HTTPError, ConnectionError, InvalidSchema, Timeout) as e:
             self.logger.exception(e)
@@ -205,7 +237,7 @@ class DataProcCluster:
                     is_target = True
 
             if not is_target:
-                if i == self._max_attempts_to_check_status:
+                if i == self._max_attempts:
                     self.logger.error(
                         "No more attemts left to check Cluster status! Cluster status is unknown."
                     )
@@ -214,3 +246,14 @@ class DataProcCluster:
                 sleep(60)
                 self.logger.debug("Another attempt to check status")
                 i += 1
+
+
+if __name__ == "__main__":
+    try:
+        if 0 < 1:
+            raise YandexAPIError(msg="0 not lower that 1!")
+    except YandexAPIError as e:
+        try:
+            e.retry()
+        except YandexAPIError:
+            raise

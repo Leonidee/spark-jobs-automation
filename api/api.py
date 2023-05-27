@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.datamodel import ArgsKeeper
+from src.datamodel.datamodel import ArgsKeeper
 
 app = FastAPI()
 
