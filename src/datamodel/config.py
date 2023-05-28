@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, validator
+import re
 
 
 class SparkConfigKeeper(BaseModel):
     """Dataclass for keeping Spark configuration properties
 
     ## Properties
-    `executor_memory` : spark.executor.memory\n
-    `executor_cores` : spark.executor.cores\n
-    `max_executors_num` : spark.dynamicAllocation.maxExecutors\n
+    `executor_memory` : `spark.executor.memory` - Amount of memory to use per executor process, in the same format as JVM memory strings with a size unit suffix ("k", "m", "g" or "t") (e.g. 512m, 2g)\n
+    `executor_cores` : `spark.executor.cores`\n
+    `max_executors_num` : `spark.dynamicAllocation.maxExecutors`\n
 
     ## Raises
     `ValueError` : Raises if parameter don't pass validation
@@ -27,6 +28,10 @@ class SparkConfigKeeper(BaseModel):
     def validate_executor_memory(cls, v) -> str:
         if not isinstance(v, str):
             raise ValueError("must be string")
+        if not re.match(pattern=r"^\d+[kmgt]$", string=v):
+            raise ValueError(
+                'must be in JVM memory strings format with a size unit suffix ("k", "m", "g" or "t") (e.g. 512m, 2g)'
+            )
         return v
 
     @validator("executor_cores")

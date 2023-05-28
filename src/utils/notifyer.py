@@ -16,6 +16,20 @@ from src.utils.logger import SparkLogger
 from src.utils.environ import EnvironManager
 
 
+class TelegramBaseError(Exception):
+    ...
+
+
+class AirflowContextError(TelegramBaseError):
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+
+
+class EnableToSendMessageError(TelegramBaseError):
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+
+
 class TelegramNotifyer:
     """Project Telegram notifyer. Sends messages about Airflow DAG health.
 

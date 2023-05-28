@@ -66,6 +66,8 @@ class ArgsKeeper(BaseModel):
 
     @validator("depth")
     def validate_depth(cls, v) -> int:
+        if not isinstance(v, int):
+            raise ValueError("must string")
         if v > 150:
             raise ValueError("must be lower than 150")
         if v > 100:
@@ -78,12 +80,16 @@ class ArgsKeeper(BaseModel):
 
     @validator("src_path")
     def validate_src_path(cls, v) -> str:
+        if not isinstance(v, str):
+            raise ValueError("must string")
         if "s3" not in v:
             raise ValueError("only S3 service paths allowed")
         return v
 
     @validator("tgt_path")
     def validate_tgt_path(cls, v) -> str:
+        if not isinstance(v, str):
+            raise ValueError("must string")
         if "s3" not in v:
             raise ValueError("only S3 service paths allowed")
         return v
@@ -91,6 +97,8 @@ class ArgsKeeper(BaseModel):
     @validator("processed_dttm")
     def validate_processed_dttm(cls, v) -> str:
         if v is not None:
+            if not isinstance(v, str):
+                raise ValueError("must string")
             if not re.match(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", string=v):
                 raise ValueError("must be '%Y-%m-%dT%H:%M:%S' format")
         return v

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import sys
 from logging import getLogger
-from os import getenv
+import os
 from pathlib import Path
 from time import sleep
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -17,34 +18,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
 from src.utils import SparkLogger
 from src.utils import EnvironManager
-
-
-class DataProcClusterError(Exception):
-    ...
-
-
-class YandexAPIError(DataProcClusterError):
-    """Test
-
-    ## Parameters
-    `DataProcClusterError` : _description_
-    """
-
-    def __init__(self, msg) -> None:
-        """TEst"""
-        super().__init__(msg)
-
-    def retry(self, max_retries: int = 3, delay: int = 10) -> None:
-        retries = 0
-        while retries < max_retries:
-            try:
-                print(retries)
-                raise Exception
-            except Exception:
-                retries += 1
-                sleep(delay)
-
-        raise self
+from src.cluster.exception import YandexAPIError
 
 
 class DataProcCluster:
@@ -53,7 +27,7 @@ class DataProcCluster:
     ## Notes
     To initialize Class instance you need to specify environment variables in `.env` project file or as a global environment variables. See `.env.template` for mote details.
 
-    At iinitializing moment gets IAM token to communicate to Yandex Cloud API.
+    At initializing moment will try to get IAM token from environment variables if no ones, sends request to get token and than set to environ. IAM token needs to communicate with Yandex Cloud API.
 
     ## Examples
     Initialize Class instance:
@@ -70,16 +44,9 @@ class DataProcCluster:
     ... [2023-05-26 12:51:41] {src.cluster:156} INFO: Current cluster status is: STARTING
     ... [2023-05-26 12:59:39] {src.cluster:160} INFO: Current cluster status is: RUNNING
     ... [2023-05-26 12:59:39] {src.cluster:165} INFO: The target status has been reached!
-
-    We can change max attempts to check cluster status:
-    >>> cluster.max_attempts_to_check_status = 1
-    >>> cluster.check_status(target_status="stopped")
-    ... [2023-05-26 13:03:38] {src.cluster:140} INFO: Sending request to check Cluster status. Target status: stopped
-    ... [2023-05-26 13:03:39] {src.cluster:163} INFO: Current cluster status is: RUNNING
-    ... [2023-05-26 13:03:39] {src.cluster:173} ERROR: No more attemts left to check Cluster status! Cluster status is unknown.
     """
 
-    def __init__(self, max_attempts_to_check_status: int = 10) -> None:
+    def __init__(self, max_retries: int = 10, retry_delay: int = 60) -> None:
         config = Config()
         env = EnvironManager()
         env.load_environ()
@@ -91,27 +58,25 @@ class DataProcCluster:
             )
         )
 
-        self.cluster_id = getenv("YC_DATAPROC_CLUSTER_ID")
-        self.base_url = getenv("YC_DATAPROC_BASE_URL")
-        self.oauth_token = getenv("YC_OAUTH_TOKEN")
-        self.token = self._get_iam_token()
-        self._max_attempts = max_attempts_to_check_status
+        self._MAX_RETRIES = max_retries
+        self._DELAY = retry_delay
+        self._CLUSTER_ID = os.getenv("YC_DATAPROC_CLUSTER_ID")
+        self._BASE_URL = os.getenv("YC_DATAPROC_BASE_URL")
+        self._OAUTH_TOKEN = os.getenv("YC_OAUTH_TOKEN")
+
+        if "YC_IAM_TOKEN" not in os.environ:
+            self._get_iam_token()
+        self._IAM_TOKEN = os.getenv("YC_IAM_TOKEN")
 
     @property
-    def max_attempts_to_check_status(self) -> int:
+    def max_retries(self) -> int:
         """
-        Max attempts to check Cluster status, defaults 10. Must be lower than 20.
-
-        Between each attempt will pause on 60 seconds.
-
-        ## Examples
-        You can change attribute this way:
-        >>> cluster.max_attempts_to_check_status = 2
+        Max retries to check Cluster status, defaults 10. Must be lower than 20.
         """
-        return self._max_attempts
+        return self._MAX_RETRIES
 
-    @max_attempts_to_check_status.setter
-    def max_attempts_to_check_status(self, value: int) -> None:
+    @max_retries.setter
+    def max_retries(self, value: int) -> None:
         if not isinstance(value, int):
             raise ValueError("value must be integer")
 
@@ -121,139 +86,277 @@ class DataProcCluster:
         if value < 0:
             raise ValueError("value must be positive")
 
-        self._max_attempts = value
+        self._MAX_RETRIES = value
 
-    @max_attempts_to_check_status.deleter
-    def max_attempts_to_check_status(self) -> None:
+    @max_retries.deleter
+    def max_retries(self) -> None:
         "Resets to default value"
-        self._max_attempts = 10
+        self._MAX_RETRIES = 10
 
-    def _get_iam_token(self) -> str:
+    @property
+    def retry_delay(self) -> int:
+        """Delay between retries in secs. Must be lower than 30 minutes"""
+        return self._DELAY
+
+    @retry_delay.setter
+    def retry_delay(self, value: int) -> None:
+        if not isinstance(value, int):
+            raise ValueError("value must be integer")
+
+        if value < 0:
+            raise ValueError("value must be positive")
+
+        if value > 60 * 30:
+            raise ValueError("must be lower than 30 minutes")
+
+        self._DELAY = value
+
+    @retry_delay.deleter
+    def retry_delay(self) -> None:
+        "Resets to default value"
+        self._DELAY = 60
+
+    def _get_iam_token(self) -> None:
         """
-        Gets IAM token to be able to communicate with Yandex Cloud API.
+        Gets IAM token from Yandex Cloud API. If recieved, set as environment variable.
 
-        Used at the time of initialization class instance.
-
-        ## Returns
-        `str` : IAM token
+        ## Raises
+        `YandexAPIError` : If enable to get IAM token or error occured while sending requests to API
         """
 
         self.logger.debug("Getting Yandex Cloud IAM token")
 
-        try:
-            self.logger.debug("Send request to API")
-            response = requests.post(
-                url="https://iam.api.cloud.yandex.net/iam/v1/tokens",
-                json={"yandexPassportOauthToken": self.oauth_token},
-                timeout=60 * 2,
-            )
-            response.raise_for_status()
+        self.logger.debug(f"Max retries: {self._MAX_RETRIES}")
+        self.logger.debug(f"Delay between retries: {self._DELAY} secs")
+
+        _TRY = 1
+        _OK = False
+
+        while not _OK:
+            try:
+                self.logger.debug(f"Send request to API. Try: {_TRY}")
+                response = requests.post(
+                    url="https://iam.api.cloud.yandex.net/iam/v1/tokens",
+                    json={"yandexPassportOauthToken": self._OAUTH_TOKEN},
+                    timeout=60 * 2,
+                )
+                response.raise_for_status()
+
+            except (HTTPError, ConnectionError, InvalidSchema, Timeout) as e:
+                if _TRY == self._MAX_RETRIES:
+                    raise YandexAPIError(
+                        f"Enable to send request to API and no more retries left. Possible because of exception:\n{e}"
+                    )
+                else:
+                    self.logger.warning(
+                        "An error occured! See traceback below. Will make another try after delay"
+                    )
+                    self.logger.exception(e)
+                    _TRY += 1
+                    sleep(self._DELAY)
+                    continue
 
             if response.status_code == 200:
                 self.logger.debug("Response received")
                 response = response.json()
 
-                if "iamToken" in response.keys():
-                    iam_token = response["iamToken"]
+                try:
+                    # fmt: off
+                    token_key = next(_ for _ in response.keys() if re.search("iamtoken", _, re.IGNORECASE))
+
+                    # fmt: on
                     self.logger.debug("IAM token collected!")
+                    os.environ["YC_IAM_TOKEN"] = response[token_key]
+                    _OK = True
+                    break
+
+                except StopIteration:
+                    if _TRY == self._MAX_RETRIES:
+                        raise YandexAPIError(
+                            "Enable to get IAM token from API response!"
+                        )
+                    else:
+                        self.logger.warning(
+                            "No IAM token in API response. Will make another try after delay"
+                        )
+                        _TRY += 1
+                        sleep(self._DELAY)
+                        continue
+
+            else:
+                if _TRY == self._MAX_RETRIES:
+                    raise YandexAPIError(
+                        "Enable to get IAM token from API. No more retries left"
+                    )
                 else:
-                    raise YandexAPIError("There is no IAM token in API response!")
-
-        except (HTTPError, ConnectionError, InvalidSchema, Timeout) as e:
-            self.logger.exception(e)
-            sys.exit(1)
-
-        return iam_token  # type: ignore
+                    self.logger.warning(
+                        "Ops, seems like something went wrong. Will make another try after delay"
+                    )
+                    _TRY += 1
+                    sleep(self._DELAY)
+                    continue
 
     def exec_command(self, command: Literal["start", "stop"]) -> None:
         """Sends request to execute Cluster command.
 
         ## Parameters
         `command` : Command to execute
+
+        ## Raises
+        `YandexAPIError` : If enable get response or error occured while sending requests to API and no more retries left
         """
         self.logger.info(f"Sending request to execute Cluster command: {command}")
 
-        try:
-            self.logger.debug("Requesting...")
-            response = requests.post(
-                url=f"{self.base_url}/{self.cluster_id}:{command}",
-                headers={"Authorization": f"Bearer {self.token}"},
-                timeout=60 * 2,
-            )
-            response.raise_for_status()
+        self.logger.debug(f"Max retries: {self._MAX_RETRIES}")
+        self.logger.debug(f"Delay between retries: {self._DELAY} secs")
+
+        _TRY = 1
+        _OK = False
+
+        while not _OK:
+            try:
+                self.logger.debug(f"Requesting... Try: {_TRY}")
+                response = requests.post(
+                    url=f"{self._BASE_URL}/{self._CLUSTER_ID}:{command}",
+                    headers={"Authorization": f"Bearer {self._IAM_TOKEN}"},
+                    timeout=60 * 2,
+                )
+                response.raise_for_status()
+
+            except (HTTPError, InvalidSchema, ConnectionError, Timeout) as e:
+                if _TRY == self._MAX_RETRIES:
+                    raise YandexAPIError(
+                        f"Enable to send request to API and no more retries left. Possible because of exception:\n{e}"
+                    )
+
+                self.logger.warning(
+                    "An error occured! See traceback below. Will make another try after delay"
+                )
+                self.logger.exception(e)
+                _TRY += 1
+                sleep(self._DELAY)
+                continue
 
             if response.status_code == 200:
                 self.logger.debug("Response received")
-                self.logger.debug(f"API response: {response.json()}")
+                self.logger.debug(f"API response:\n{response.json()}")
+                _OK = True
+                break
 
-        except (HTTPError, InvalidSchema, ConnectionError) as e:
-            self.logger.error(e)
-            sys.exit(1)
+            else:
+                if _TRY == self._MAX_RETRIES:
+                    raise YandexAPIError("Enable send request to API!")
+
+                self.logger.debug(
+                    "Ops, seems like something went wrong. Will make another try after delay"
+                )
+                _TRY += 1
+                sleep(self._DELAY)
+                continue
 
     def check_status(self, target_status: Literal["running", "stopped"]) -> None:
         """Sends request to check current Cluster status.
 
         Waits until Cluster status will be equal to `target_status`.
 
-        ## Notes
-        If the target status is not reached after all attempts, the application is killed with the returning code 1.
-
-        The default `max_attempts_to_check_status` attribute set to 10 (ten attempts with 60 secs pause between each)
-        You can change it like that:
-        >>> cluster.max_attempts_to_check_status = 2
-
         ## Parameters
         `target_status` : The target Cluster status
+
+        ## Raises
+        `YandexAPIError` : If enable get response or error occured while sending requests to API and no more retries left
+
+        ## Notes
+
+        The default `max_retries_to_check_status` attribute set to 10 (ten attempts with 60 secs pause between each)
+        You can change it like that:
+        >>> cluster.max_retries_to_check_status = 2
         """
         self.logger.info(
             f"Sending request to check Cluster status. Target status: {target_status}"
         )
 
-        is_target = False
-        i = 1
+        self.logger.debug(f"Max retries: {self._MAX_RETRIES}")
+        self.logger.debug(f"Delay between retries: {self._DELAY} secs")
 
-        while not is_target:
+        _TRY = 1
+        _IS_TARGET = False
+
+        while not _IS_TARGET:
             try:
-                self.logger.debug(f"Requesting... Attempt: {i}")
+                self.logger.debug(f"Requesting... Try: {_TRY}")
                 response = requests.get(
-                    url=f"{self.base_url}/{self.cluster_id}",
-                    headers={"Authorization": f"Bearer {self.token}"},
+                    url=f"{self._BASE_URL}/{self._CLUSTER_ID}",
+                    headers={"Authorization": f"Bearer {self._IAM_TOKEN}"},
+                    timeout=60 * 2,
                 )
                 response.raise_for_status()
-            except (HTTPError, InvalidSchema, ConnectionError) as e:
-                self.logger.error(e)
-                sys.exit(1)
+            except (HTTPError, InvalidSchema, ConnectionError, Timeout) as e:
+                if _TRY == self._MAX_RETRIES:
+                    raise YandexAPIError(
+                        f"Enable to send request to API and no more retries left. Possible because of exception:\n{e}"
+                    )
+                else:
+                    self.logger.warning(
+                        "An error occured! See traceback below. Will make another try after delay"
+                    )
+                    self.logger.exception(e)
+                    _TRY += 1
+                    sleep(self._DELAY)
+                    continue
 
             if response.status_code == 200:
+                self.logger.debug("Response recieved")
+
                 response = response.json()
-                self.logger.debug(f"API response: {response}")
+                self.logger.debug(f"API response:\n{response}")
 
-                self.logger.info(
-                    f"Current cluster status is: {response.get('status', 'unknown')}"
-                )
+                # fmt: off
+                status_key = next(_ for _ in response.keys() if re.search("status", _, re.IGNORECASE))
 
-                if response["status"].strip().lower() == target_status:
-                    self.logger.info("The target status has been reached!")
-                    is_target = True
-
-            if not is_target:
-                if i == self._max_attempts:
-                    self.logger.error(
-                        "No more attemts left to check Cluster status! Cluster status is unknown."
+                # fmt: on
+                if status_key in response.keys():
+                    self.logger.info(
+                        f"Current cluster status is: {response.get(status_key, 'unknown')}"
                     )
-                    sys.exit(1)
+                    if response[status_key].strip().lower() == target_status:
+                        self.logger.info("The target status has been reached!")
+                        _IS_TARGET = True
+                        break
 
-                sleep(60)
-                self.logger.debug("Another attempt to check status")
-                i += 1
-
-
-if __name__ == "__main__":
-    try:
-        if 0 < 1:
-            raise YandexAPIError(msg="0 not lower that 1!")
-    except YandexAPIError as e:
-        try:
-            e.retry()
-        except YandexAPIError:
-            raise
+                    else:
+                        if _TRY == self._MAX_RETRIES:
+                            raise YandexAPIError(
+                                "No more retries left to check Cluster status!\n"
+                                f"Last received status was: {response.get('status', 'unknown')}"
+                            )
+                        else:
+                            self.logger.debug(
+                                "Not target yet. Will make another try after delay"
+                            )
+                            _TRY += 1
+                            sleep(self._DELAY)
+                            continue
+                else:
+                    if _TRY == self._MAX_RETRIES:
+                        raise YandexAPIError(
+                            "Enable to get 'status' from API response. No more retries left"
+                        )
+                    else:
+                        self.logger.warning(
+                            "No 'status' in API response. Will make another try after delay"
+                        )
+                        _TRY += 1
+                        sleep(self._DELAY)
+                        continue
+            else:
+                if _TRY == self._MAX_RETRIES:
+                    raise YandexAPIError(
+                        "Enable to get Cluster status from API. No more retries left"
+                    )
+                else:
+                    self.logger.warning(
+                        "Ops, seems like something went wrong. Will make another try after delay"
+                    )
+                    _TRY += 1
+                    sleep(self._DELAY)
+                    continue

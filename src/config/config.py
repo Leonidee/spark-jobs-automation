@@ -45,13 +45,9 @@ class Config:
     @IS_PROD.setter
     def IS_PROD(self, value: bool) -> None:
         if not isinstance(value, bool):
-            raise ValueError("value must be boolean!")
+            raise ValueError("value must be boolean")
 
         self._is_prod = value
-
-    @IS_PROD.deleter
-    def IS_PROD(self) -> None:
-        self._is_prod = None
 
     @property
     def get_users_info_datamart_config(self) -> dict:
