@@ -12,8 +12,8 @@ from botocore.exceptions import ClientError
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
-from src.utils import SparkLogger
-from src.utils import EnvironManager
+from src.logger import SparkLogger
+from src.environ import EnvironError, EnvironManager
 
 os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
 os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
@@ -67,12 +67,15 @@ class SparkRunner:
 
     def __init__(self) -> None:
         config = Config()
-        env = EnvironManager()
-        env.load_environ()
 
         self.logger = SparkLogger(level=config.python_log_level).get_logger(
             logger_name=__name__
         )
+        try:
+            env = EnvironManager()
+            env.load_environ()
+        except EnvironError as e:
+            self.logger.critical(e)
 
     def _get_s3_instance(self):
         "Get ready-to-use boto3 S3 connection instance"

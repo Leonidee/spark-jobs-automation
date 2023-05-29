@@ -8,13 +8,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 
-from requests import post
+import requests
 from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeout
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
-from src.utils import SparkLogger
-from src.utils import EnvironManager
+from src.logger import SparkLogger
+from src.environ import EnvironManager, EnvironError
 
 if TYPE_CHECKING:
     from typing import Literal
@@ -28,10 +28,8 @@ class SparkSubmitter:
     To initialize instance of Class you need to specify `FAST_API_BASE_URL` in `.env` project file or as a global environment variable.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, session_timeout: int = 60 * 60) -> None:
         config = Config()
-        env = EnvironManager()
-        env.load_environ()
 
         self.logger = (
             getLogger("aiflow.task")
@@ -40,7 +38,14 @@ class SparkSubmitter:
                 logger_name=__name__
             )
         )
+        try:
+            env = EnvironManager()
+            env.load_environ()
+        except EnvironError as e:
+            self.logger.critical(e)
+
         self.api_base_url = getenv("FAST_API_BASE_URL")
+        self._session_timeout = session_timeout
 
     @property
     def session_timeout(self) -> int:
@@ -48,11 +53,13 @@ class SparkSubmitter:
         return self._session_timeout
 
     @session_timeout.setter
-    def session_timeout(self, value: int) -> None:
-        if not isinstance(value, int):
-            raise ValueError("value must be integer or exepretion returns integer!")
+    def session_timeout(self, v: int) -> None:
+        if not isinstance(v, int):
+            raise ValueError("value must be integer")
+        if v < 0:
+            raise ValueError("must be positive")
 
-        self._session_timeout = value
+        self._session_timeout = v
 
     def submit_job(self, job: Literal["users_info_datamart_job", "location_zone_agg_datamart_job", "friend_recommendation_datamart_job"], keeper: ArgsKeeper) -> bool:  # type: ignore
         """Sends request to API to submit Spark job in Hadoop Cluster.
@@ -80,7 +87,7 @@ class SparkSubmitter:
 
         try:
             self.logger.debug("Send request to API")
-            response = post(
+            response = requests.post(
                 url=f"{self.api_base_url}/submit_{job}",
                 timeout=self.session_timeout,
                 data=keeper.json(),

@@ -16,9 +16,10 @@ from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeo
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
-from src.utils import SparkLogger
-from src.utils import EnvironManager
+from src.logger import SparkLogger
+from src.environ import EnvironManager
 from src.cluster.exception import YandexAPIError
+from src.environ import EnvironError
 
 
 class DataProcCluster:
@@ -48,8 +49,7 @@ class DataProcCluster:
 
     def __init__(self, max_retries: int = 10, retry_delay: int = 60) -> None:
         config = Config()
-        env = EnvironManager()
-        env.load_environ()
+
         self.logger = (
             getLogger("aiflow.task")
             if config.IS_PROD
@@ -57,6 +57,11 @@ class DataProcCluster:
                 logger_name=__name__
             )
         )
+        try:
+            env = EnvironManager()
+            env.load_environ()
+        except EnvironError as e:
+            self.logger.critical(e)
 
         self._MAX_RETRIES = max_retries
         self._DELAY = retry_delay

@@ -13,9 +13,10 @@ from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeo
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
-from src.utils.logger import SparkLogger
-from src.utils.environ import EnvironManager
-from src.utils.exception import EnableToSendMessageError, AirflowContextError
+from src.logger import SparkLogger
+from src.environ import EnvironManager
+from src.notifyer.exception import EnableToSendMessageError, AirflowContextError
+from src.environ import EnvironError
 
 
 class TelegramNotifyer:
@@ -29,8 +30,6 @@ class TelegramNotifyer:
 
     def __init__(self) -> None:
         config = Config()
-        env = EnvironManager()
-        env.load_environ()
 
         self.logger = (
             getLogger("aiflow.task")
@@ -39,6 +38,12 @@ class TelegramNotifyer:
                 logger_name=__name__
             )
         )
+        try:
+            env = EnvironManager()
+            env.load_environ()
+        except EnvironError as e:
+            self.logger.critical(e)
+
         self._CHAT_ID = getenv("TG_CHAT_ID")
         self._BOT_TOKEN = getenv("TG_BOT_TOKEN")
 

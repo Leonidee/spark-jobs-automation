@@ -4,8 +4,9 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.utils.logger import SparkLogger
+from src.logger import SparkLogger
 from src.config import Config
+from src.environ.exception import EnvironError
 
 
 class EnvironManager:
@@ -52,15 +53,13 @@ class EnvironManager:
             )
             self.logger.debug("File found")
         except IOError:
-            self.logger.critical(".env file not found. Environ not loaded!")
-            return False
+            raise EnvironError(".env file not found. Environ not loaded")
 
         self.logger.debug("Reading .env file")
         try:
             self._load_dotenv(dotenv_path=path, verbose=True, override=True)
-        except IOError:
-            self.logger.critical("Enable to read .env file. Environ not loaded!")
-            return False
+            self.logger.debug("Environ loaded")
+            return True
 
-        self.logger.debug("Environ loaded")
-        return True
+        except IOError:
+            raise EnvironError("Enable to read .env file. Environ not loaded")

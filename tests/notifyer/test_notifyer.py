@@ -9,7 +9,7 @@ import pytest
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.utils import EnableToSendMessageError, AirflowContextError
+from src.notifyer import EnableToSendMessageError, AirflowContextError
 
 
 @patch("src.utils.notifyer.requests.post")

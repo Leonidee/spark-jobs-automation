@@ -9,7 +9,8 @@ import pytest
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.cluster import DataProcCluster
 from src.datamodel import ArgsKeeper, SparkConfigKeeper
-from src.utils import TelegramNotifyer
+from src.notifyer import TelegramNotifyer
+from src.environ import EnvironManager
 
 
 @pytest.fixture
@@ -52,3 +53,8 @@ def airflow_context():
         execution_date="2022-01-01T00:00:00.000000",
     )
     return context
+
+
+@pytest.fixture
+def environ():
+    return EnvironManager()
