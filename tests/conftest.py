@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.cluster import DataProcCluster
 from src.datamodel import ArgsKeeper, SparkConfigKeeper
+from src.utils import TelegramNotifyer
 
 
 @pytest.fixture
@@ -33,3 +35,20 @@ def config_keeper() -> SparkConfigKeeper:
         executor_memory="2g", executor_cores=1, max_executors_num=24
     )
     return conf
+
+
+@pytest.fixture
+def notifyer():
+    return TelegramNotifyer()
+
+
+@pytest.fixture
+def airflow_context():
+    context = dict(
+        task_instance=MagicMock(
+            task_id="my_task_id",
+            dag_id="my_dag_id",
+        ),
+        execution_date="2022-01-01T00:00:00.000000",
+    )
+    return context

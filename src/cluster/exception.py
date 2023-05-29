@@ -1,5 +1,5 @@
 class YandexAPIError(Exception):
-    def __init__(self, msg) -> None:
+    def __init__(self, msg: str) -> None:
         """Occurs while interacting with Yandex Cloud Rest API.
 
         ## Parameters
