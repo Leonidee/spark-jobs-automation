@@ -15,11 +15,13 @@ from src.environ import EnvironManager
 
 @pytest.fixture
 def cluster() -> DataProcCluster:
+    """Returns instance of `DataProcCluster` class"""
     return DataProcCluster()
 
 
 @pytest.fixture
 def keeper() -> ArgsKeeper:
+    """Returns instance of `ArgsKeeper` dataclass with filled valid parameters"""
     keeper = ArgsKeeper(
         date="2022-04-03",
         depth=10,
@@ -32,6 +34,7 @@ def keeper() -> ArgsKeeper:
 
 @pytest.fixture
 def config_keeper() -> SparkConfigKeeper:
+    """Returns instance of `SparkConfigKeeper` dataclass with filled valid parameters"""
     conf = SparkConfigKeeper(
         executor_memory="2g", executor_cores=1, max_executors_num=24
     )
@@ -40,11 +43,13 @@ def config_keeper() -> SparkConfigKeeper:
 
 @pytest.fixture
 def notifyer():
+    """Returns instance of `TelegramNotifyer` class"""
     return TelegramNotifyer()
 
 
 @pytest.fixture
 def airflow_context():
+    """Returns Airflow context dictionary"""
     context = dict(
         task_instance=MagicMock(
             task_id="my_task_id",
@@ -57,4 +62,5 @@ def airflow_context():
 
 @pytest.fixture
 def environ():
+    """Returns instance of `EnvironManager` class"""
     return EnvironManager()

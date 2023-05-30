@@ -1,12 +1,24 @@
 from __future__ import annotations
 
 import yaml
+import os
+from pathlib import Path
+import sys
+
+sys.path.append(str(Path(__file__).parent.parent.parent))
+from src.config.exception import EnableToGetConfig
 
 
 class Config:
-    """Parses project configuration file: `config.yaml`.
+    """Parses project configuration file. By default file named `config.yaml` and located in project root directory.
 
     File contains configurations for Spark Jobs and project environment.
+
+    ## Parameters
+    `config_name` : Name of config file to search in project directory, defults `config.yaml`
+
+    ## Raises
+    `EnableToGetConfig` : Raise if enable to find or load config file
 
     ## Notes
     Confinguration file should be located in root project directory.
@@ -33,10 +45,35 @@ class Config:
     2022-03-12
     """
 
-    def __init__(self) -> None:
-        with open("config.yaml") as f:
-            self.config = yaml.safe_load(f)
+    def __init__(self, config_name: str = "config.yaml") -> None:  # type: ignore
+        self.config_name = config_name
+        self._CONFIG_PATH = self._find_config()
+
+        try:
+            with open(self._CONFIG_PATH) as f:
+                self.config = yaml.safe_load(f)
+        except FileNotFoundError:
+            raise EnableToGetConfig("Enable to load config file")
+
         self._is_prod = self.config["environ"]["IS_PROD"]
+
+    def _find_config(self) -> Path:
+        config_path = None
+
+        for _, _, files in os.walk("."):
+            if self.config_name in files:
+                for file in files:
+                    if file == self.config_name:
+                        config_path = Path(file).resolve()
+
+        if not config_path:
+            raise EnableToGetConfig(
+                "Enable to find config file in project!\n"
+                "Please, create one or explicitly specify the file name.\n"
+                "You can find config file template here -> `$PROJECT_DIR/templates/config.template.yaml`"
+            )
+        else:
+            return config_path
 
     @property
     def IS_PROD(self) -> bool:
