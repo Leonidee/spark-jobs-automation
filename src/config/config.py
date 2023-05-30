@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import yaml
+import re
 import os
 from pathlib import Path
 import sys
@@ -19,6 +20,7 @@ class Config:
 
     ## Raises
     `EnableToGetConfig` : Raise if enable to find or load config file
+    `ValueError` : If wrong config name specified
 
     ## Notes
     Confinguration file should be located in root project directory.
@@ -46,7 +48,9 @@ class Config:
     """
 
     def __init__(self, config_name: str = "config.yaml") -> None:  # type: ignore
-        self.config_name = config_name
+        self._validate_config_name(name=config_name)
+
+        self._CONFIG_NAME = config_name
         self._CONFIG_PATH = self._find_config()
 
         try:
@@ -57,23 +61,34 @@ class Config:
 
         self._is_prod = self.config["environ"]["IS_PROD"]
 
+    def _validate_config_name(self, name: str) -> None:
+        if not isinstance(name, str):
+            raise ValueError("config name must be string type")
+        if not re.match(pattern=r"^\w+\.ya?ml$", string=name):
+            raise ValueError("invalid config file extention, must be 'yml' or 'yaml'")
+
     def _find_config(self) -> Path:
-        config_path = None
+        CONFIG_PATH = None
 
-        for _, _, files in os.walk("."):
-            if self.config_name in files:
+        _PROJECT_NAME = "spark-jobs-automation"
+        _ = os.path.abspath(__file__)
+        i, _ = _.split(_PROJECT_NAME)
+        root_path = i + _PROJECT_NAME
+
+        for _, _, files in os.walk(top=root_path):
+            if self._CONFIG_NAME in files:
                 for file in files:
-                    if file == self.config_name:
-                        config_path = Path(file).resolve()
+                    if file == self._CONFIG_NAME:
+                        CONFIG_PATH = Path(file).resolve()
 
-        if not config_path:
+        if not CONFIG_PATH:
             raise EnableToGetConfig(
                 "Enable to find config file in project!\n"
                 "Please, create one or explicitly specify the file name.\n"
                 "You can find config file template here -> `$PROJECT_DIR/templates/config.template.yaml`"
             )
         else:
-            return config_path
+            return CONFIG_PATH
 
     @property
     def IS_PROD(self) -> bool:

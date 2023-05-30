@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from datetime import datetime
 from logging import getLogger
-from os import getenv
+import os
 from pathlib import Path
 from time import sleep
 
@@ -16,7 +16,6 @@ from src.config import Config
 from src.logger import SparkLogger
 from src.environ import EnvironManager
 from src.notifyer.exception import EnableToSendMessageError, AirflowContextError
-from src.environ import EnvironError
 
 
 class TelegramNotifyer:
@@ -38,14 +37,16 @@ class TelegramNotifyer:
                 logger_name=__name__
             )
         )
-        try:
-            env = EnvironManager()
-            env.load_environ()
-        except EnvironError as e:
-            self.logger.critical(e)
+        environ = EnvironManager()
+        environ.load_environ()
 
-        self._CHAT_ID = getenv("TG_CHAT_ID")
-        self._BOT_TOKEN = getenv("TG_BOT_TOKEN")
+        _REQUIRED_VARS = (
+            "TG_CHAT_ID",
+            "TG_BOT_TOKEN",
+        )
+
+        self._CHAT_ID, self._BOT_TOKEN = map(os.getenv, _REQUIRED_VARS)
+        environ.check_environ(var=_REQUIRED_VARS)  # type: ignore
 
         self._MAX_RETRIES = 3
         self._DELAY = 5

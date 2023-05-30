@@ -1,38 +1,30 @@
-import warnings
+import os
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent))
+
+from src.environ import EnvironManager
+from src.config import Config
 
 
 def main():
-    # d = dict(
-    #     iamToken="14902934", status="success", login="lgrishenkov", dt="2023-01-01"
-    # )
-    d = {
-        # "    IamTOkeN  ": "14902934",
-        " sTAtus": "success",
-        "  Login    ": "lgrishenkov",
-        "Dt ": "2023-01-01",
-    }
+    env = EnvironManager()
+    os.environ["YC_DATAPROC_CLUSTER_ID"] = "some"
+    os.environ["YC_DATAPROC_BASE_URL"] = "some"
+    # env_ = ("YC_DATAPROC_CLUSTER_ID", "YC_DATAPROC_BASE_URL")
+    # env.check_environ(env=env_)
 
-    # if "iamToken" in d.keys():
-    #     print("yes")
-    # print({x.lower().strip() for x in d.keys()})
-
-    # if "iamtoken" in {x.lower().strip() for x in d.keys()}:
-    #     print(True)
-    import re
-
-    # for _ in d.keys():
-    #     token_name = _ if re.search("iamtoken", _, re.IGNORECASE) else "iamToken"
-
-    # for _ in d.keys():
-    try:
-        token_name = next(
-            _ for _ in d.keys() if re.search("iamtoken", _, re.IGNORECASE)
-        )
-        print(token_name)
-        print(d[token_name])
-        print(type(token_name))
-    except StopIteration:
-        warnings.warn("Some warning. Are you sure?", UserWarning)
+    _ENV = (
+        "YC_DATAPROC_CLUSTER_ID",
+        "YC_DATAPROC_BASE_URL",
+        "YC_OAUTH_TOKEN",
+        "YC_IAM_TOKEN",
+    )
+    # print(_ENV[:3])
+    a, b, c = map(os.getenv, _ENV[:3])
+    print(a)
+    print(b)
 
 
 if __name__ == "__main__":

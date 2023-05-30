@@ -9,8 +9,3 @@ from src.config import Config
 
 #
 # class TestConfig:
-
-
-if __name__ == "__main__":
-    conf = Config()
-    print(conf.get_spark_application_name)

@@ -19,7 +19,6 @@ from src.config import Config
 from src.logger import SparkLogger
 from src.environ import EnvironManager
 from src.cluster.exception import YandexAPIError
-from src.environ import EnvironError
 
 
 class DataProcCluster:
@@ -57,21 +56,28 @@ class DataProcCluster:
                 logger_name=__name__
             )
         )
-        try:
-            env = EnvironManager()
-            env.load_environ()
-        except EnvironError as e:
-            self.logger.critical(e)
+        environ = EnvironManager()
+        environ.load_environ()
 
         self._MAX_RETRIES = max_retries
         self._DELAY = retry_delay
-        self._CLUSTER_ID = os.getenv("YC_DATAPROC_CLUSTER_ID")
-        self._BASE_URL = os.getenv("YC_DATAPROC_BASE_URL")
-        self._OAUTH_TOKEN = os.getenv("YC_OAUTH_TOKEN")
 
-        if "YC_IAM_TOKEN" not in os.environ:
+        _REQUIRED_VARS = (
+            "YC_DATAPROC_CLUSTER_ID",
+            "YC_DATAPROC_BASE_URL",
+            "YC_OAUTH_TOKEN",
+            "YC_IAM_TOKEN",
+        )
+
+        self._CLUSTER_ID, self._BASE_URL, self._OAUTH_TOKEN, self._IAM_TOKEN = map(
+            os.getenv, _REQUIRED_VARS
+        )
+
+        if not self._IAM_TOKEN:
             self._get_iam_token()
-        self._IAM_TOKEN = os.getenv("YC_IAM_TOKEN")
+            self._IAM_TOKEN = os.getenv("YC_IAM_TOKEN")
+
+        environ.check_environ(var=_REQUIRED_VARS)  # type: ignore
 
     @property
     def max_retries(self) -> int:

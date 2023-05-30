@@ -56,11 +56,11 @@ class ArgsKeeper(BaseModel):
             raise ValueError("must string")
         if not re.match(pattern=r"^\d{4}-\d{2}-\d{2}$", string=v):
             raise ValueError("must be '%Y-%m-%d' format")
-        if datetime.strptime(v, "%Y-%m-%d").date() > date.today():
+        if datetime.strptime(v, r"%Y-%m-%d").date() > date.today():
             raise ValueError("date must be earlier than today")
-        if datetime.strptime(v, "%Y-%m-%d").date() < datetime(2015, 1, 1).date():
+        if datetime.strptime(v, r"%Y-%m-%d").date() < datetime(2015, 1, 1).date():
             raise ValueError("dates earlier than '2015-01-01' not allowed yet")
-        if datetime.strptime(v, "%Y-%m-%d").date() < datetime(2020, 1, 1).date():
+        if datetime.strptime(v, r"%Y-%m-%d").date() < datetime(2020, 1, 1).date():
             raise UserWarning(f"are you sure that '{v}' date is correct?")
         return v
 
