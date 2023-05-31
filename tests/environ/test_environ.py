@@ -1,17 +1,40 @@
-import pytest
 import os
 import sys
 from pathlib import Path
 
+import pytest
+from unittest.mock import patch
+
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.environ import EnvironNotSet
-from src.environ import EnvironManager
+from src.environ import EnvironNotSet, DotEnvError
 
 
-@pytest.fixture
-def environ():
-    """Returns instance of `EnvironManager` class"""
-    return EnvironManager()
+class TestLoadEnviron:
+    def test_load_environ_success(self, environ):
+        with patch.object(environ, "_find_dotenv", return_value="/path/to/.env"):
+            with patch.object(environ, "_read_dotenv", return_value=None):
+                assert environ.load_environ() == True
+
+    def test_load_environ_file_not_found(self, environ):
+        with patch.object(environ, "_find_dotenv", side_effect=IOError):
+            with pytest.raises(
+                DotEnvError, match=".env file not found. Environ not loaded"
+            ):
+                environ.load_environ()
+
+    def test_load_environ_file_not_found_real(self, environ):
+        with pytest.raises(
+            DotEnvError, match=".env file not found. Environ not loaded"
+        ):
+            environ.load_environ("nonexistent_name")
+
+    def test_load_environ_file_read_error(self, environ):
+        with patch.object(environ, "_find_dotenv", return_value="/path/to/.env"):
+            with patch.object(environ, "_read_dotenv", side_effect=IOError):
+                with pytest.raises(
+                    DotEnvError, match="Enable to read .env file. Environ not loaded"
+                ):
+                    environ.load_environ()
 
 
 class TestCheckEnviron:
@@ -27,14 +50,13 @@ class TestCheckEnviron:
         assert environ.check_environ(var=_VARS) == True
 
     def test_check_environ_multiple_missing_var(self, environ):
-        os.environ["EXACTLY_NOT_SET_VAR"] = None
+        with pytest.raises(EnvironNotSet):
+            environ.check_environ("NOT_SET_VAR")
+
+    def test_check_environ_multiple_empty_var(self, environ):
+        _VARS = ("SET_VAR", "NOT_SET_VAR")
+
+        os.environ["SET_VAR"] = "test_value"
 
         with pytest.raises(EnvironNotSet):
-            environ.check_environ("EXACTLY_NOT_SET_VAR")
-
-    # def test_check_environ_multiple_empty_var(self, environ):
-    #     os.environ["SET_VAR"] = "test_value_1"
-    #     os.environ["NOT_SET_VAR"] = ""
-
-    #     with pytest.raises(EnvironNotSet):
-    #         environ.check_environ(("SET_VAR", "NOT_SET_VAR"))
+            environ.check_environ(var=_VARS)

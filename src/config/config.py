@@ -6,6 +6,12 @@ import os
 from pathlib import Path
 import sys
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from os import PathLike
+    from typing import Dict
+
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config.exception import EnableToGetConfig
 
@@ -47,11 +53,19 @@ class Config:
     2022-03-12
     """
 
-    def __init__(self, config_name: str = "config.yaml") -> None:  # type: ignore
-        self._validate_config_name(name=config_name)
-
-        self._CONFIG_NAME = config_name
-        self._CONFIG_PATH = self._find_config()
+    def __init__(
+        self, config_name: str = None, config_path: PathLike[str] | Path = None  # type: ignore
+    ) -> None:
+        if config_name:
+            self._validate_config_name(name=config_name)
+            self._CONFIG_NAME = config_name
+            self._CONFIG_PATH = self._find_config()
+        elif config_path:
+            self._CONFIG_PATH = config_path
+        else:
+            raise ValueError(
+                "One of the arguments required. Please specify 'config_name' or 'config_path'"
+            )
 
         try:
             with open(self._CONFIG_PATH) as f:
@@ -61,11 +75,13 @@ class Config:
 
         self._is_prod = self.config["environ"]["IS_PROD"]
 
-    def _validate_config_name(self, name: str) -> None:
+    def _validate_config_name(self, name: str) -> bool:
         if not isinstance(name, str):
             raise ValueError("config name must be string type")
         if not re.match(pattern=r"^\w+\.ya?ml$", string=name):
             raise ValueError("invalid config file extention, must be 'yml' or 'yaml'")
+
+        return True
 
     def _find_config(self) -> Path:
         CONFIG_PATH = None
@@ -75,13 +91,21 @@ class Config:
         i, _ = _.split(_PROJECT_NAME)
         root_path = i + _PROJECT_NAME
 
-        for _, _, files in os.walk(top=root_path):
-            if self._CONFIG_NAME in files:
+        for _, _, files in os.walk(
+            top=root_path
+        ):  # os.walk returns 3 tuples, we need only last one - with filenames
+            if (
+                self._CONFIG_NAME in files
+            ):  # if project files contains given config_name
                 for file in files:
-                    if file == self._CONFIG_NAME:
-                        CONFIG_PATH = Path(file).resolve()
+                    if (
+                        file == self._CONFIG_NAME
+                    ):  # try to find file which name equal to given config_name
+                        CONFIG_PATH = Path(
+                            file
+                        ).resolve()  # resolving path to that file
 
-        if not CONFIG_PATH:
+        if not CONFIG_PATH:  # if not find config_name if project files
             raise EnableToGetConfig(
                 "Enable to find config file in project!\n"
                 "Please, create one or explicitly specify the file name.\n"
@@ -102,15 +126,17 @@ class Config:
         self._is_prod = value
 
     @property
-    def get_users_info_datamart_config(self) -> dict:
+    def get_users_info_datamart_config(self) -> Dict[str, str] | Dict[str, int]:
         return self.config["spark"]["jobs"]["users_info_datamart"]
 
     @property
-    def get_location_zone_agg_datamart_config(self) -> dict:
+    def get_location_zone_agg_datamart_config(self) -> Dict[str, str] | Dict[str, int]:
         return self.config["spark"]["jobs"]["location_zone_agg_datamart"]
 
     @property
-    def get_friend_recommendation_datamart_config(self) -> dict:
+    def get_friend_recommendation_datamart_config(
+        self,
+    ) -> Dict[str, str] | Dict[str, int]:
         return self.config["spark"]["jobs"]["friend_recommendation_datamart"]
 
     @property

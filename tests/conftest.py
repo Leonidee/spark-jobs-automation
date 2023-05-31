@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
+from unittest.mock import MagicMock
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.cluster import DataProcCluster
 from src.datamodel import ArgsKeeper, SparkConfigKeeper
 from src.notifyer import TelegramNotifyer
 from src.environ import EnvironManager
+from src.config import Config
 
 
 @pytest.fixture
@@ -64,3 +65,9 @@ def airflow_context():
 def environ():
     """Returns instance of `EnvironManager` class"""
     return EnvironManager()
+
+
+@pytest.fixture
+def config():
+    """Returns instance of `Config` class"""
+    return Config(config_name="config.yaml")

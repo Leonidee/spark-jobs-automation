@@ -6,6 +6,8 @@ import os
 
 from typing import overload, Tuple
 
+from dotenv import find_dotenv, load_dotenv
+
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.logger import SparkLogger
 from src.config import Config
@@ -36,10 +38,9 @@ class EnvironManager:
 
     def __init__(self) -> None:
         config = Config()
-        from dotenv import find_dotenv, load_dotenv
 
         self._find_dotenv = find_dotenv
-        self._load_dotenv = load_dotenv
+        self._read_dotenv = load_dotenv
         self.logger = SparkLogger(level=config.python_log_level).get_logger(
             logger_name=__name__
         )
@@ -65,16 +66,16 @@ class EnvironManager:
 
         self.logger.debug("Trying to find .env in project")
         try:
-            path = self._find_dotenv(
+            _PATH = self._find_dotenv(
                 filename=dotenv_file_name, raise_error_if_not_found=True
             )
-            self.logger.debug("File found")
+            self.logger.debug(f"File found. Path to file: {_PATH}")
         except IOError:
             raise DotEnvError(".env file not found. Environ not loaded")
 
         self.logger.debug("Reading .env file")
         try:
-            self._load_dotenv(dotenv_path=path, verbose=True, override=True)
+            self._read_dotenv(dotenv_path=_PATH, verbose=True, override=True)
             self.logger.debug("Environ loaded")
             return True
 
