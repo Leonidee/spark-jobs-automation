@@ -4,7 +4,7 @@ import sys
 from logging import getLogger
 import os
 from pathlib import Path
-from time import sleep
+import time
 import re
 from typing import TYPE_CHECKING
 
@@ -164,7 +164,7 @@ class DataProcCluster:
                     )
                     self.logger.exception(e)
                     _TRY += 1
-                    sleep(self._DELAY)
+                    time.sleep(self._DELAY)
                     continue
 
             if response.status_code == 200:
@@ -191,7 +191,7 @@ class DataProcCluster:
                             "No IAM token in API response. Will make another try after delay"
                         )
                         _TRY += 1
-                        sleep(self._DELAY)
+                        time.sleep(self._DELAY)
                         continue
 
             else:
@@ -204,7 +204,7 @@ class DataProcCluster:
                         "Ops, seems like something went wrong. Will make another try after delay"
                     )
                     _TRY += 1
-                    sleep(self._DELAY)
+                    time.sleep(self._DELAY)
                     continue
 
     def exec_command(self, command: Literal["start", "stop"]) -> None:
@@ -245,7 +245,7 @@ class DataProcCluster:
                 )
                 self.logger.exception(e)
                 _TRY += 1
-                sleep(self._DELAY)
+                time.sleep(self._DELAY)
                 continue
 
             if response.status_code == 200:
@@ -262,7 +262,7 @@ class DataProcCluster:
                     "Ops, seems like something went wrong. Will make another try after delay"
                 )
                 _TRY += 1
-                sleep(self._DELAY)
+                time.sleep(self._DELAY)
                 continue
 
     def check_status(self, target_status: Literal["running", "stopped"]) -> None:
@@ -312,7 +312,7 @@ class DataProcCluster:
                     )
                     self.logger.exception(e)
                     _TRY += 1
-                    sleep(self._DELAY)
+                    time.sleep(self._DELAY)
                     continue
 
             if response.status_code == 200:
@@ -345,7 +345,7 @@ class DataProcCluster:
                                 "Not target yet. Will make another try after delay"
                             )
                             _TRY += 1
-                            sleep(self._DELAY)
+                            time.sleep(self._DELAY)
                             continue
                 else:
                     if _TRY == self._MAX_RETRIES:
@@ -357,7 +357,7 @@ class DataProcCluster:
                             "No 'status' in API response. Will make another try after delay"
                         )
                         _TRY += 1
-                        sleep(self._DELAY)
+                        time.sleep(self._DELAY)
                         continue
             else:
                 if _TRY == self._MAX_RETRIES:
@@ -369,5 +369,5 @@ class DataProcCluster:
                         "Ops, seems like something went wrong. Will make another try after delay"
                     )
                     _TRY += 1
-                    sleep(self._DELAY)
+                    time.sleep(self._DELAY)
                     continue

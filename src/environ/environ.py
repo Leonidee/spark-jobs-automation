@@ -37,7 +37,7 @@ class EnvironManager:
     """
 
     def __init__(self) -> None:
-        config = Config()
+        config = Config(config_name="config.yaml")
 
         self._find_dotenv = find_dotenv
         self._read_dotenv = load_dotenv
