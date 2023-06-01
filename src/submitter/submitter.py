@@ -10,13 +10,21 @@ from typing import TYPE_CHECKING
 
 
 import requests
-from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeout
+from requests.exceptions import (
+    ConnectionError,
+    HTTPError,
+    InvalidSchema,
+    Timeout,
+    InvalidURL,
+    MissingSchema,
+    JSONDecodeError,
+)
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
 from src.logger import SparkLogger
 from src.environ import EnvironManager
-from src.submitter.exception import EnableToSubmitJob
+from src.submitter.exception import UnableToSubmitJob
 
 if TYPE_CHECKING:
     from typing import Literal
@@ -91,7 +99,7 @@ class SparkSubmitter:
 
         s = "".join(
             f"\t{i[0]}: {i[1]}\n" for i in keeper
-        )  # for print job arguments in logs
+        )  # for print each job argument in logs
         self.logger.info("Spark job args:\n" + s)
 
         _TRY = 1
@@ -111,10 +119,18 @@ class SparkSubmitter:
                 _OK = True
                 break
 
-            except (HTTPError, InvalidSchema, ConnectionError, Timeout) as e:
+            except Timeout:
+                raise UnableToSubmitJob(f"Timeout error. Unable to submit '{job}' job.")
+
+            except (InvalidSchema, InvalidURL, MissingSchema):
+                raise UnableToSubmitJob(
+                    "Invalid schema provided. Please check 'CLUSTER_API_BASE_URL' environ variable"
+                )
+
+            except (HTTPError, ConnectionError) as e:
                 if _TRY == _MAX_RETRIES:
-                    raise EnableToSubmitJob(
-                        f"Enable to send request to API and no more retries left. Possible because of exception:\n{e}"
+                    raise UnableToSubmitJob(
+                        f"Unable to send request to API and no more retries left. Possible because of exception:\n{e}"
                     )
                 else:
                     self.logger.warning(
@@ -131,7 +147,16 @@ class SparkSubmitter:
         if response.status_code == 200:  # type: ignore
             self.logger.debug("Response received")
 
-            response = response.json()  # type: ignore
+            try:
+                self.logger.debug("Decoding response")
+                response = response.json()  # type: ignore
+
+            except JSONDecodeError as e:
+                raise UnableToSubmitJob(
+                    f"Unable to decode API reponse.\n"
+                    "Posible submiting job process failed.\n"
+                    f"Decode error was -> {e}"
+                )
 
             if response.get("returncode") == 0:
                 self.logger.info(
@@ -145,15 +170,15 @@ class SparkSubmitter:
                 self.logger.error(f"Job stdout:\n{response.get('stdout')}")
                 self.logger.error(f"Job stderr:\n{response.get('stderr')}")
 
-                raise EnableToSubmitJob(
+                raise UnableToSubmitJob(
                     f"Unable to submit {job} job! API returned 1 code. See job output in logs"
                 )
             else:
-                raise EnableToSubmitJob(
-                    f"Unable to submit {job} job." f"API response: {response}"
+                raise UnableToSubmitJob(
+                    f"Unable to submit {job} job.\n" f"API response: {response}"
                 )
         else:
-            raise EnableToSubmitJob(
-                f"Unable to submit {job} job. Something went wrong."
+            raise UnableToSubmitJob(
+                f"Unable to submit {job} job. Something went wrong.\n"
                 f"API response status code: {response.status_code}"  # type: ignore
             )
