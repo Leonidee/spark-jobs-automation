@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from typing import Dict
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.config.exception import EnableToGetConfig
+from src.config.exceptions import EnableToGetConfig
 
 
 class Config:

@@ -4,7 +4,14 @@ from unittest.mock import patch, MagicMock
 import os
 
 import pytest
-from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeout
+from requests.exceptions import (
+    ConnectionError,
+    HTTPError,
+    InvalidSchema,
+    Timeout,
+    JSONDecodeError,
+)
+
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -13,66 +20,115 @@ from src.cluster import YandexAPIError
 
 class TestGetIAMToken:
     @patch("src.cluster.cluster.requests.post")
-    def test_get_iam_token(self, mock_post, cluster):
+    def test_success(self, mock_post, cluster):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"iamToken": "test_token"}
         mock_post.return_value = mock_response
 
-        cluster._get_iam_token()
+        result = cluster._get_iam_token()
         assert os.environ["YC_IAM_TOKEN"] == "test_token"
+        assert result == True
 
     @patch("src.cluster.cluster.requests.post")
-    def test_get_iam_token_raises_if_error(self, mock_post, cluster):
-        msg = "Some error"
+    def test_raises_if_timeout_error(self, mock_post, cluster):
         mock_post.side_effect = [
-            HTTPError(msg),
-            Timeout(msg),
-            ConnectionError(msg),
-            InvalidSchema(msg),
+            Timeout,
+            Timeout,
         ]
 
-        with pytest.raises(YandexAPIError):
-            cluster.max_retries = 4
+        with pytest.raises(YandexAPIError) as e:
+            cluster.max_retries = 2
             cluster.retry_delay = 1
+
             cluster._get_iam_token()
 
+        assert e.type == YandexAPIError
+        assert "Timeout error. Unable to send request" in str(e.value)
+
     @patch("src.cluster.cluster.requests.post")
-    def test_get_iam_token_raises_if_no_token(self, mock_post, cluster):
+    def test_raises_if_invalid_schema_error(self, mock_post, cluster):
+        mock_post.side_effect = [
+            InvalidSchema,
+        ]
+
+        with pytest.raises(YandexAPIError) as e:
+            cluster._get_iam_token()
+
+        assert e.type == YandexAPIError
+        assert "Invalid url or schema provided" in str(e.value)
+
+    @patch("src.cluster.cluster.requests.post")
+    def test_raises_if_http_error(self, mock_post, cluster):
+        mock_post.side_effect = [HTTPError, ConnectionError, HTTPError]
+
+        with pytest.raises(YandexAPIError) as e:
+            cluster.max_retries = 3
+            cluster.retry_delay = 1
+
+            cluster._get_iam_token()
+
+        assert e.type == YandexAPIError
+        assert "Enable to send request to API. Possible because of exception" in str(
+            e.value
+        )
+
+    @patch("src.cluster.cluster.requests.post")
+    def test_raises_if_no_token(self, mock_post, cluster):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"not_token": "some_value"}
 
         mock_post.return_value = mock_response
 
-        with pytest.raises(YandexAPIError):
+        with pytest.raises(YandexAPIError) as e:
             cluster.max_retries = 3
             cluster.retry_delay = 1
             cluster._get_iam_token()
 
+        assert e.type == YandexAPIError
+        assert "Enable to get IAM token from API response" in str(e.value)
+
     @patch("src.cluster.cluster.requests.post")
-    def test_get_iam_raises_if_wrong_status_code(self, mock_post, cluster):
+    def test_raises_if_unable_to_decode_response(self, mock_post, cluster):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.side_effect = JSONDecodeError("Invalid JSON", "test", 0)
+
+        mock_post.return_value = mock_response
+
+        with pytest.raises(YandexAPIError) as e:
+            cluster.max_retries = 3
+            cluster.retry_delay = 1
+            cluster._get_iam_token()
+
+        assert e.type == YandexAPIError
+        assert "Unable to decode API reponse" in str(e.value)
+
+    @patch("src.cluster.cluster.requests.post")
+    def test_raises_if_invalid_status_code(self, mock_post, cluster):
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_post.return_value = mock_response
 
-        with pytest.raises(YandexAPIError):
+        with pytest.raises(YandexAPIError) as e:
             cluster.max_retries = 2
             cluster.retry_delay = 1
             cluster._get_iam_token()
 
+        assert e.type == YandexAPIError
+        assert "Enable to get IAM token from API" in str(e.value)
+
     @patch("src.cluster.cluster.requests.post")
-    def test_get_iam_if_errors_but_finally_success(self, mock_post, cluster):
-        msg = "Some error"
+    def test_if_errors_but_finally_success(self, mock_post, cluster):
         mock_post.side_effect = [
-            HTTPError(msg),
-            Timeout(msg),
-            ConnectionError(msg),
-            InvalidSchema(msg),
+            HTTPError,
+            Timeout,
+            ConnectionError,
             MagicMock(status_code=200, json=lambda: {"iamToken": "some_value"}),
         ]
 
-        cluster.max_retries = 5
+        cluster.max_retries = 4
         cluster.retry_delay = 1
 
         cluster._get_iam_token()
@@ -81,60 +137,90 @@ class TestGetIAMToken:
 
 class TestExecCommand:
     @patch("src.cluster.cluster.requests.post")
-    def test_exec_command_start_success(self, mock_post, cluster):
+    def test_start_success(self, mock_post, cluster):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"some_key": "some_value"}
 
         mock_post.return_value = mock_response
 
-        cluster.exec_command("start")
+        result = cluster.exec_command("start")
 
         mock_post.assert_called_once()
+        assert result == True
 
     @patch("src.cluster.cluster.requests.post")
-    def test_exec_command_raises_if_error(self, mock_post, cluster):
-        msg = "Some error"
-        mock_post.side_effect = [
-            HTTPError(msg),
-            Timeout(msg),
-            ConnectionError(msg),
-            InvalidSchema(msg),
-        ]
+    def test_raises_if_timeout_error(self, mock_post, cluster):
+        mock_post.side_effect = (
+            Timeout,
+            Timeout,
+            Timeout,
+        )
 
-        with pytest.raises(YandexAPIError):
-            cluster.max_retries = 4
+        with pytest.raises(YandexAPIError) as e:
+            cluster.max_retries = 3
             cluster.retry_delay = 1
             cluster.exec_command(command="start")
 
+        assert e.type == YandexAPIError
+        assert "Timeout error. Unable to send request to execute command: start" in str(
+            e.value
+        )
+
     @patch("src.cluster.cluster.requests.post")
-    def test_exec_command_raises_if_max_retries_achieved(self, mock_post, cluster):
+    def test_raises_if_invalid_url_error(self, mock_post, cluster):
+        mock_post.side_effect = InvalidSchema
+
+        with pytest.raises(YandexAPIError) as e:
+            cluster.exec_command(command="start")
+
+        assert e.type == YandexAPIError
+        assert "Invalid url or schema provided" in str(e.value)
+
+    @patch("src.cluster.cluster.requests.post")
+    def test_raises_if_http_error(self, mock_post, cluster):
+        mock_post.side_effect = (HTTPError, HTTPError, ConnectionError)
+
+        with pytest.raises(YandexAPIError) as e:
+            cluster.max_retries = 3
+            cluster.retry_delay = 1
+            cluster.exec_command(command="start")
+
+        assert e.type == YandexAPIError
+        assert "Enable to send request to API. Possible because of exception" in str(
+            e.value
+        )
+
+    @patch("src.cluster.cluster.requests.post")
+    def test_raises_if_invalid_status_code(self, mock_post, cluster):
         mock_response = MagicMock()
         mock_response.status_code = 500
 
         mock_post.return_value = mock_response
 
-        with pytest.raises(YandexAPIError):
+        with pytest.raises(YandexAPIError) as e:
             cluster.max_retries = 2
             cluster.retry_delay = 1
             cluster.exec_command(command="start")
 
+        assert e.type == YandexAPIError
+        assert "Enable send request to API!" in str(e.value)
+
     @patch("src.cluster.cluster.requests.post")
-    def test_exec_command_if_errors_but_finally_success(self, mock_post, cluster):
-        msg = "Some error"
+    def test_if_errors_but_finally_success(self, mock_post, cluster):
         mock_post.side_effect = [
-            HTTPError(msg),
-            Timeout(msg),
-            ConnectionError(msg),
-            InvalidSchema(msg),
+            Timeout,
+            HTTPError,
+            ConnectionError,
+            HTTPError,
             MagicMock(status_code=200, json=lambda: {"some_key": "some_value"}),
         ]
 
         cluster.max_retries = 5
         cluster.retry_delay = 1
-        cluster.exec_command(command="start")
+        result = cluster.exec_command(command="start")
 
-        mock_post.assert_called()
+        assert result == True
 
 
 class TestCheckStatus:
@@ -146,117 +232,125 @@ class TestCheckStatus:
 
         mock_get.return_value = mock_response
 
-        cluster.check_status(target_status="running")
-
-        mock_get.assert_called_once_with(
-            url=f"{cluster._BASE_URL}/{cluster._CLUSTER_ID}",
-            headers={"Authorization": f"Bearer {cluster._IAM_TOKEN}"},
-            timeout=60 * 2,
-        )
+        result = cluster.check_status(target_status="running")
+        assert result == True
 
     @patch("src.cluster.cluster.requests.get")
-    def test_check_status_raises_if_error(self, mock_post, cluster):
-        msg = "Some error"
-        mock_post.side_effect = [
-            HTTPError(msg),
-            Timeout(msg),
-            ConnectionError(msg),
-            InvalidSchema(msg),
-        ]
+    def test_raises_if_timeout_error(self, mock_get, cluster):
+        mock_get.side_effect = (
+            Timeout,
+            Timeout,
+            Timeout,
+        )
 
-        with pytest.raises(YandexAPIError):
-            cluster.max_retries = 4
+        with pytest.raises(YandexAPIError) as e:
+            cluster.max_retries = 3
+            cluster.retry_delay = 1
+            cluster.check_status(target_status="running")
+
+        assert e.type == YandexAPIError
+        assert "Timeout error. Unable to get cluster status" in str(e.value)
+
+    @patch("src.cluster.cluster.requests.get")
+    def test_raises_if_invalid_url_error(self, mock_get, cluster):
+        mock_get.side_effect = InvalidSchema
+
+        with pytest.raises(YandexAPIError) as e:
+            cluster.check_status(target_status="running")
+
+        assert e.type == YandexAPIError
+        assert "Invalid url or schema provided" in str(e.value)
+        assert "'YC_DATAPROC_BASE_URL' and 'YC_DATAPROC_CLUSTER_ID'" in str(e.value)
+
+    @patch("src.cluster.cluster.requests.get")
+    def test_raises_if_http_error(self, mock_get, cluster):
+        mock_get.side_effect = (HTTPError, HTTPError, ConnectionError)
+
+        with pytest.raises(YandexAPIError) as e:
+            cluster.max_retries = 3
             cluster.retry_delay = 1
 
             cluster.check_status(target_status="running")
 
+        assert e.type == YandexAPIError
+        assert "Enable to send request to API" in str(e.value)
+
     @patch("src.cluster.cluster.requests.get")
-    def test_check_status_raises_if_max_retries_achieved(self, mock_post, cluster):
+    def test_raises_if_invalid_status_code(self, mock_get, cluster):
         mock_response = MagicMock()
         mock_response.status_code = 500
 
-        mock_post.return_value = mock_response
+        mock_get.return_value = mock_response
 
-        with pytest.raises(YandexAPIError):
+        with pytest.raises(YandexAPIError) as e:
             cluster.max_retries = 2
             cluster.retry_delay = 1
 
             cluster.check_status(target_status="running")
 
+        assert e.type == YandexAPIError
+        assert "Enable to get Cluster status from API" in str(e.value)
+
     @patch("src.cluster.cluster.requests.get")
-    def test_check_status_raises_if_not_target(self, mock_post, cluster):
+    def test_raises_if_not_target(self, mock_get, cluster):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"status": "NOT_RUNNING"}
 
-        mock_post.return_value = mock_response
+        mock_get.return_value = mock_response
 
-        with pytest.raises(YandexAPIError):
+        with pytest.raises(YandexAPIError) as e:
             cluster.max_retries = 2
             cluster.retry_delay = 1
 
             cluster.check_status(target_status="running")
 
+        assert e.type == YandexAPIError
+        assert "No more retries left to check Cluster status!" in str(e.value)
+
     @patch("src.cluster.cluster.requests.get")
-    def test_check_status_raises_if_wrong_response(self, mock_post, cluster):
+    def test_raises_if_wrong_response(self, mock_get, cluster):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"not_status": "..."}
+        mock_response.json.return_value = {"test": "test"}
 
-        mock_post.return_value = mock_response
+        mock_get.return_value = mock_response
 
-        with pytest.raises(YandexAPIError):
-            cluster.max_retries = 2
+        with pytest.raises(YandexAPIError) as e:
+            cluster.max_retries = 3
             cluster.retry_delay = 1
 
             cluster.check_status(target_status="running")
 
+        assert e.type == YandexAPIError
+        assert "Enable to get 'status' from API response" in str(e.value)
+
     @patch("src.cluster.cluster.requests.get")
-    def test_check_status_success_after_errors(self, mock_get, cluster):
+    def test_raises_if_unable_to_decode_response(self, mock_get, cluster):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.side_effect = JSONDecodeError("Invalid JSON", "test", 0)
+
+        mock_get.return_value = mock_response
+
+        with pytest.raises(YandexAPIError) as e:
+            cluster.max_retries = 3
+            cluster.retry_delay = 1
+
+            cluster.check_status(target_status="running")
+
+        assert e.type == YandexAPIError
+        assert "Unable to decode API reponse" in str(e.value)
+
+    @patch("src.cluster.cluster.requests.get")
+    def test_if_errors_but_finally_success(self, mock_get, cluster):
         mock_get.side_effect = [
-            Timeout(),
-            ConnectionError(),
-            InvalidSchema(),
-            HTTPError(),
+            Timeout,
+            ConnectionError,
+            HTTPError,
             MagicMock(status_code=200, json=lambda: {"status": "RUNNING"}),
         ]
         cluster.retry_delay = 1
-        cluster.check_status("running")
+        result = cluster.check_status("running")
 
-        mock_get.assert_called()
-
-    @patch("src.cluster.cluster.requests.get")
-    def test_check_status_raises_after_errors_if_no_status(self, mock_get, cluster):
-        mock_get.side_effect = [
-            Timeout(),
-            ConnectionError(),
-            InvalidSchema(),
-            HTTPError(),
-            MagicMock(status_code=200, json=lambda: {"not_status": "..."}),
-            MagicMock(status_code=200, json=lambda: {"not_status": "..."}),
-        ]
-
-        with pytest.raises(YandexAPIError):
-            cluster.max_retries = 6
-            cluster.retry_delay = 1
-
-            cluster.check_status(target_status="running")
-
-    @patch("src.cluster.cluster.requests.get")
-    def test_check_status_raises_after_errors_if_wrong_status_code(
-        self, mock_get, cluster
-    ):
-        mock_get.side_effect = [
-            Timeout(),
-            ConnectionError(),
-            InvalidSchema(),
-            HTTPError(),
-            MagicMock(status_code=500),
-            MagicMock(status_code=500),
-        ]
-
-        with pytest.raises(YandexAPIError) as e:
-            cluster.max_retries = 6
-            cluster.retry_delay = 1
-
-            cluster.check_status(target_status="running")
+        assert result == True

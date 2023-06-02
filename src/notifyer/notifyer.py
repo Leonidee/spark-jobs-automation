@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime
-from logging import getLogger
 import os
 from pathlib import Path
 from time import sleep
@@ -12,13 +11,12 @@ from requests.exceptions import ConnectionError, HTTPError, InvalidSchema, Timeo
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.config import Config
-from src.logger import SparkLogger
 from src.environ import EnvironManager
-from src.notifyer.exception import EnableToSendMessageError, AirflowContextError
+from src.notifyer.exceptions import EnableToSendMessageError, AirflowContextError
+from src.base import BaseRequester
 
 
-class TelegramNotifyer:
+class TelegramNotifyer(BaseRequester):
     """Project Telegram notifyer. Sends messages about Airflow DAG health.
 
     ## Notes
@@ -27,16 +25,19 @@ class TelegramNotifyer:
     See `.env.template` for more details.
     """
 
-    def __init__(self) -> None:
-        config = Config()
-
-        self.logger = (
-            getLogger("aiflow.task")
-            if config.IS_PROD
-            else SparkLogger(level=config.python_log_level).get_logger(
-                logger_name=__name__
-            )
+    def __init__(
+        self,
+        *,
+        max_retries: int = 10,
+        retry_delay: int = 60,
+        session_timeout: int = 60 * 2,
+    ) -> None:
+        super().__init__(
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            session_timeout=session_timeout,
         )
+
         environ = EnvironManager()
         environ.load_environ()
 
@@ -47,9 +48,6 @@ class TelegramNotifyer:
 
         self._CHAT_ID, self._BOT_TOKEN = map(os.getenv, _REQUIRED_VARS)
         environ.check_environ(var=_REQUIRED_VARS)  # type: ignore
-
-        self._MAX_RETRIES = 3
-        self._DELAY = 5
 
     def notify_on_task_failure(self, context: dict) -> None:
         """This function is designed to be used in the Airflow ecosystem and should be called from `default_args` `on_failure_callback` argument of either a DAG or Airflow task.

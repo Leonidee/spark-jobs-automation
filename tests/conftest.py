@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+import os
 
 import pytest
 from unittest.mock import MagicMock
@@ -12,6 +13,7 @@ from src.datamodel import ArgsKeeper, SparkConfigKeeper
 from src.notifyer import TelegramNotifyer
 from src.environ import EnvironManager
 from src.config import Config
+from src.submitter import SparkSubmitter
 
 
 @pytest.fixture
@@ -71,3 +73,14 @@ def environ():
 def config():
     """Returns instance of `Config` class"""
     return Config(config_name="config.yaml")
+
+
+@pytest.fixture
+def submitter():
+    os.environ["CLUSTER_API_BASE_URL"] = "http://example.com"
+    return SparkSubmitter(session_timeout=1)
+
+
+@pytest.fixture
+def test_job_name():
+    return "users_info_datamart_job"

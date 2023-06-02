@@ -11,7 +11,7 @@ from dotenv import find_dotenv, load_dotenv
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.logger import SparkLogger
 from src.config import Config
-from src.environ.exception import EnvironNotSet, DotEnvError
+from src.environ.exceptions import EnvironNotSet, DotEnvError
 
 
 class EnvironManager:
