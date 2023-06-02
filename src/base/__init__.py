@@ -1,5 +1,5 @@
 from __future__ import annotations
 
-from src.base.base import BaseRequester
+from src.base.base import BaseRequestHandler
 
-__all__ = ["BaseRequester"]
+__all__ = ["BaseRequestHandler"]

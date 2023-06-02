@@ -15,7 +15,7 @@ class AirflowContextError(TelegramBaseError):
         super().__init__(msg)
 
 
-class EnableToSendMessageError(TelegramBaseError):
+class EnableToSendMessage(TelegramBaseError):
     def __init__(self, msg: str) -> None:
         """Can be occur when enable to send telegram message.
 

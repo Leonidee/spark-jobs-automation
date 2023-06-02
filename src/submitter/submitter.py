@@ -27,14 +27,14 @@ from src.submitter.exceptions import (
     UnableToSendRequest,
     UnableToGetResponse,
 )
-from src.base import BaseRequester
+from src.base import BaseRequestHandler
 
 if TYPE_CHECKING:
     from typing import Literal
     from src.datamodel import ArgsKeeper
 
 
-class SparkSubmitter(BaseRequester):
+class SparkSubmitter(BaseRequestHandler):
     """Sends request to Fast API upon Hadoop Cluster to submit Spark jobs.
 
     ## Notes

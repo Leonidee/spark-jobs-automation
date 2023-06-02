@@ -25,10 +25,10 @@ from requests.exceptions import (
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.environ import EnvironManager
 from src.cluster.exceptions import YandexAPIError
-from src.base import BaseRequester
+from src.base import BaseRequestHandler
 
 
-class DataProcCluster(BaseRequester):
+class DataProcCluster(BaseRequestHandler):
     """Class for manage DataProc Clusters. Sends requests to Yandex Cloud API.
 
     ## Notes

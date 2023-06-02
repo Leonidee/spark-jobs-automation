@@ -11,7 +11,7 @@ from src.config import Config
 from src.logger import SparkLogger
 
 
-class BaseRequester:
+class BaseRequestHandler:
     def __init__(
         self,
         *,

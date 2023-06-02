@@ -136,6 +136,7 @@ class TestGetIAMToken:
 
 
 class TestExecCommand:
+    @pytest.mark.actual
     @patch("src.cluster.cluster.requests.post")
     def test_start_success(self, mock_post, cluster):
         mock_response = MagicMock()
