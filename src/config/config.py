@@ -71,7 +71,7 @@ class Config:
             with open(self._CONFIG_PATH) as f:
                 self.config = yaml.safe_load(f)
         except FileNotFoundError:
-            raise EnableToGetConfig("Enable to load config file")
+            raise EnableToGetConfig("Unable to load config file")
 
         self._is_prod = self.config["environ"]["IS_PROD"]
 
@@ -91,9 +91,9 @@ class Config:
         i, _ = _.split(_PROJECT_NAME)
         root_path = i + _PROJECT_NAME
 
-        for _, _, files in os.walk(
+        for dirpath, _, files in os.walk(
             top=root_path
-        ):  # os.walk returns 3 tuples, we need only last one - with filenames
+        ):  # os.walk returns 3 tuples, we need dirpath and files
             if (
                 self._CONFIG_NAME in files
             ):  # if project files contains given config_name
@@ -101,9 +101,7 @@ class Config:
                     if (
                         file == self._CONFIG_NAME
                     ):  # try to find file which name equal to given config_name
-                        CONFIG_PATH = Path(
-                            file
-                        ).resolve()  # resolving path to that file
+                        CONFIG_PATH = Path(dirpath, file)
 
         if not CONFIG_PATH:  # if not find config_name if project files
             raise EnableToGetConfig(

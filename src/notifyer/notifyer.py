@@ -27,7 +27,7 @@ from requests.exceptions import (
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.environ import EnvironManager
-from src.notifyer.exceptions import EnableToSendMessage, AirflowContextError
+from src.notifyer.exceptions import UnableToSendMessage, AirflowContextError
 from src.notifyer.datamodel import AirflowTaskData, TelegramMessage, MessageType
 from src.base import BaseRequestHandler
 
@@ -74,8 +74,8 @@ class TelegramNotifyer(BaseRequestHandler):
             self.logger.debug(f"{raw_context=}")
 
             try:
-                task = str(context["task_instance"].task_id)  # type: ignore
-                dag = str(context["task_instance"].dag_id)  # type: ignore
+                task = str(raw_context["task_instance"].task_id)  # type: ignore
+                dag = str(raw_context["task_instance"].dag_id)  # type: ignore
                 execution_dt = str(raw_context["execution_date"])[:19].replace("T", " ")
 
                 execution_dt = datetime.strptime(execution_dt, r"%Y-%m-%d %H:%M:%S")
@@ -84,53 +84,49 @@ class TelegramNotifyer(BaseRequestHandler):
 
                 return AirflowTaskData(task=task, dag=dag, execution_dt=execution_dt)
 
-            except (KeyError, ValueError) as e:
+            except KeyError as e:
                 if _TRY == self._MAX_RETRIES:
                     raise AirflowContextError(
-                        f"Enable to get one of the key from Aiflow context or context itself and no more retries left. Possible because of exception:\n{e=}"
+                        f"Unable to get {e.args} key/keys from Aiflow context"
                     )
 
                 else:
                     self.logger.warning(
-                        "Enable to get one of the key from Aiflow context or context itself because of error, see traceback below. Retrying..."
+                        f"Unable to get {e.args} key/keys from Aiflow context. Retrying..."
                     )
-                    self.logger.exception(e)
+                    time.sleep(self._DELAY)
+
+                    continue
+
+            except ValueError as e:
+                if _TRY == self._MAX_RETRIES:
+                    raise AirflowContextError(str(e))
+
+                else:
+                    self.logger.warning(e)
                     time.sleep(self._DELAY)
 
                     continue
 
     def _send_message(self, url: str) -> bool:  # type: ignore
+        self.logger.debug("Sending message")
         for _TRY in range(1, self._MAX_RETRIES + 1):
             try:
-                self.logger.debug(f"Sending request. Try: {_TRY}")
+                self.logger.debug(f"Requesting... Try: {_TRY}")
                 response = requests.post(url=url, timeout=self._SESSION_TIMEOUT)
 
                 response.raise_for_status()
 
-            except (InvalidSchema, InvalidURL, MissingSchema):
-                raise EnableToSendMessage(
-                    "Invalid url or schema provided. Please check 'TG_BOT_TOKEN' and 'TG_CHAT_ID' or requested url"
+            except (InvalidSchema, InvalidURL, MissingSchema) as e:
+                raise UnableToSendMessage(
+                    f"{e}. Check 'TG_BOT_TOKEN' and 'TG_CHAT_ID' or returning URL of '__make_url' function"
                 )
 
-            except Timeout:
+            except (HTTPError, ConnectionError, Timeout) as e:
                 if _TRY == self._MAX_RETRIES:
-                    raise EnableToSendMessage(f"Timeout error. Unable to send message")
-
-                self.logger.warning("Timeout error occured. Retrying...")
-                time.sleep(self._DELAY)
-
-                continue
-
-            except (HTTPError, ConnectionError) as e:
-                if _TRY == self._MAX_RETRIES:
-                    raise EnableToSendMessage(
-                        f"Enable to send message. Possible because of exception:\n{e=}"
-                    )
+                    raise UnableToSendMessage(str(e))
                 else:
-                    self.logger.warning(
-                        "An error occured while trying to send message! See traceback below. Will make another try after delay"
-                    )
-                    self.logger.exception(e)
+                    self.logger.warning(f"{e}. Retrying...")
                     time.sleep(self._DELAY)
 
                     continue
@@ -141,16 +137,13 @@ class TelegramNotifyer(BaseRequestHandler):
                 try:
                     self.logger.debug("Decoding response")
                     response = response.json()
+                    self.logger.debug(f"{response=}")
 
                 except JSONDecodeError as e:
                     if _TRY == self._MAX_RETRIES:
-                        raise EnableToSendMessage(
-                            f"Unable to decode API reponse.\n{e=}"
-                        )
+                        raise UnableToSendMessage(str(e))
                     else:
-                        self.logger.warning(
-                            "Enable to decode API response. Retrying..."
-                        )
+                        self.logger.warning(f"{e}. Retrying...")
                         time.sleep(self._DELAY)
 
                         continue
@@ -162,7 +155,7 @@ class TelegramNotifyer(BaseRequestHandler):
 
                 else:
                     if _TRY == self._MAX_RETRIES:
-                        raise EnableToSendMessage(f"Enable to send message")
+                        raise UnableToSendMessage("Unable to send message")
                     else:
                         self.logger.warning(
                             "Message not sent for some reason. Retrying..."
@@ -172,11 +165,11 @@ class TelegramNotifyer(BaseRequestHandler):
                     continue
             else:
                 if _TRY == self._MAX_RETRIES:
-                    raise EnableToSendMessage(f"Enable to send message")
+                    raise UnableToSendMessage("Unable to send message")
 
                 else:
                     self.logger.warning(
-                        "Ops, seems like something went wrong. Will make another try after delay"
+                        "Ops, seems like something went wrong. Retrying..."
                     )
                     time.sleep(self._DELAY)
 
