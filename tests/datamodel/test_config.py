@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.datamodel import SparkConfigKeeper
+from src.keeper import SparkConfigKeeper
 
 
 class TestSparkConfigKeeper:

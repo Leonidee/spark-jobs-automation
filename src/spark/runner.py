@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import List, Literal
     from pyspark.sql import DataFrame
-    from src.datamodel import ArgsKeeper, SparkConfigKeeper
+    from src.keeper import ArgsKeeper, SparkConfigKeeper
 
 
 class SparkRunner:

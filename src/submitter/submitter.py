@@ -31,7 +31,7 @@ from src.base import BaseRequestHandler
 
 if TYPE_CHECKING:
     from typing import Literal
-    from src.datamodel import ArgsKeeper
+    from src.keeper import ArgsKeeper
 
 
 class SparkSubmitter(BaseRequestHandler):

@@ -341,8 +341,7 @@ class DataProcCluster(BaseRequestHandler):
                 except JSONDecodeError as e:
                     if _TRY == self._MAX_RETRIES:
                         raise YandexAPIError(
-                            f"Unable to decode API reponse.\n"
-                            f"Decode error was -> {e}"
+                            "Unable to decode API reponse.\n" f"Decode error was -> {e}"
                         )
                     else:
                         self.logger.warning(

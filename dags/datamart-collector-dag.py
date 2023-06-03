@@ -14,7 +14,7 @@ from src.cluster.cluster import DataProcCluster
 from src.config.config import Config
 from src.utils.notifyer import TelegramNotifyer
 from src.submitter.submitter import SparkSubmitter
-from src.datamodel.datamodel import ArgsKeeper
+from src.keeper.datamodel import ArgsKeeper
 
 notifyer = TelegramNotifyer()
 logger = getLogger("aiflow.task")

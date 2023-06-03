@@ -5,7 +5,7 @@ from datetime import date, timedelta
 import pytest
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.datamodel import ArgsKeeper
+from src.keeper import ArgsKeeper
 
 
 class TestArgsKeeper:

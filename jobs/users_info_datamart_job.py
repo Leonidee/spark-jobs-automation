@@ -8,7 +8,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config
 from src.utils import SparkLogger
 from src.spark import SparkRunner
-from src.datamodel import ArgsKeeper, SparkConfigKeeper
+from src.keeper import ArgsKeeper, SparkConfigKeeper
 
 config = Config()
 
