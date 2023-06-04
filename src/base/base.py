@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import sys
-from logging import getLogger
 from pathlib import Path
 
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
-from src.logger import SparkLogger
 
 
 class BaseRequestHandler:
+    """Base Requests handler class. Contains basic attributes. Must be inherited by other classes."""
+
     def __init__(
         self,
         *,
@@ -23,15 +23,7 @@ class BaseRequestHandler:
         self._DELAY = retry_delay
         self._SESSION_TIMEOUT = session_timeout
 
-        config = Config(config_name="config.yaml")
-
-        self.logger = (
-            getLogger("aiflow.task")
-            if config.IS_PROD
-            else SparkLogger(level=config.python_log_level).get_logger(
-                logger_name=__name__
-            )
-        )
+        self.config = Config(config_name="config.yaml")
 
     @property
     def max_retries(self) -> int:

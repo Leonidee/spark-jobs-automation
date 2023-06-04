@@ -5,6 +5,7 @@ from logging import getLogger
 import os
 from pathlib import Path
 import time
+from enum import Enum
 
 from typing import TYPE_CHECKING
 
@@ -27,6 +28,7 @@ from src.submitter.exceptions import (
     UnableToSendRequest,
     UnableToGetResponse,
 )
+from src.logger import SparkLogger
 from src.base import BaseRequestHandler
 
 if TYPE_CHECKING:
@@ -35,10 +37,19 @@ if TYPE_CHECKING:
 
 
 class SparkSubmitter(BaseRequestHandler):
-    """Sends request to Fast API upon Hadoop Cluster to submit Spark jobs.
+    """Sends request to Rest API upon Hadoop Cluster to submit Spark job.
 
     ## Notes
-    To initialize instance of Class you need to specify `FAST_API_BASE_URL` in `.env` project file or as a global environment variable.
+    To initialize instance of Class you need to specify `CLUSTER_API_BASE_URL` in `.env` or as a global environment variable.
+
+    See `.env.template` for more details.
+
+    ## Examples
+    Initialize Class instance:
+    >>> submitter = SparkSubmitter()
+
+    Send request to submit 'users_info_datamart_job.py' job:
+    >>> submitter.submit_job(job="users_info_datamart_job", keeper=keeper)
     """
 
     def __init__(
@@ -48,10 +59,24 @@ class SparkSubmitter(BaseRequestHandler):
         retry_delay: int = 10,
         session_timeout: int = 60 * 60,
     ) -> None:
+        """
+
+        ## Parameters
+        `max_retries` : Max retries to send request, by default 3\n
+        `retry_delay` : Delay between retries in seconds, by default 10\n
+        `session_timeout` : Session timeout in seconds, by default 60*60
+        """
         super().__init__(
             max_retries=max_retries,
             retry_delay=retry_delay,
             session_timeout=session_timeout,
+        )
+        self.logger = (
+            getLogger("aiflow.task")
+            if self.config.IS_PROD
+            else SparkLogger(level=self.config.python_log_level).get_logger(
+                logger_name=__name__
+            )
         )
 
         environ = EnvironManager()
@@ -66,30 +91,17 @@ class SparkSubmitter(BaseRequestHandler):
         """Sends request to API to submit Spark job in Hadoop Cluster.
 
         ## Parameters
-        `job` : Spark Job to submit
-        `keeper` : Arguments keeper object
+        `job` : Spark Job name to submit
+        `keeper` : `ArgsKeeper` object with job arguments
 
         ## Returns
-        `bool` : State of submit operation
-
-        ## Examples
-        Initialize Class instance:
-        >>> submitter = SparkSubmitter()
-
-        Send request to submit 'users_info_datamart_job.py' job:
-        >>> submitter.submit_job(job="users_info_datamart_job", keeper=keeper)
+        `bool` : Returns True if success
         """
-        self.logger.info(f"Submiting '{job}.py' job")
+        self.logger.info(f"Submiting '{job}' job")
 
-        s = "".join(
-            f"\t{i[0]}: {i[1]}\n" for i in keeper
-        )  # for print each job argument in logs
-        self.logger.info("Spark job args:\n" + s)
+        self.logger.info(f"Spark job args:\n{keeper}")
 
-        _TRY = 1
-        _OK = False
-
-        while not _OK:
+        for _TRY in range(1, self._MAX_RETRIES + 1):
             try:
                 self.logger.debug(f"Requesting API. Try: {_TRY}")
                 response = requests.post(
@@ -98,38 +110,23 @@ class SparkSubmitter(BaseRequestHandler):
                     data=keeper.json(),
                 )
                 response.raise_for_status()
-                _OK = True
                 break
 
-            except Timeout:
-                if _TRY == self._MAX_RETRIES:
-                    raise UnableToSendRequest(
-                        f"Timeout error. Unable to send request for '{job}' job."
-                    )
-                self.logger.warning(
-                    "Timeout error occured. Will make another try after delay"
-                )
-                _TRY += 1
-                time.sleep(self._DELAY)
-                continue
+            except Timeout as e:
+                raise UnableToSendRequest(f"{e}. Unable to submit '{job}' job.")
 
-            except (InvalidSchema, InvalidURL, MissingSchema):
+            except (InvalidSchema, InvalidURL, MissingSchema) as e:
                 raise UnableToSendRequest(
-                    "Invalid url or schema provided. Please check 'CLUSTER_API_BASE_URL' environ variable"
+                    f"{e}. Please check 'CLUSTER_API_BASE_URL' environ variable"
                 )
 
             except (HTTPError, ConnectionError) as e:
                 if _TRY == self._MAX_RETRIES:
-                    raise UnableToSendRequest(
-                        f"Unable to send request to API and no more retries left. Possible because of exception:\n{e}"
-                    )
+                    raise UnableToSendRequest(str(e))
                 else:
-                    self.logger.warning(
-                        "An error occured! See traceback below. Will make another try after delay"
-                    )
-                    self.logger.exception(e)
-                    _TRY += 1
+                    self.logger.warning(f"{e}. Retrying...")
                     time.sleep(self._DELAY)
+
                     continue
 
         self.logger.debug("Request sent")
@@ -141,13 +138,10 @@ class SparkSubmitter(BaseRequestHandler):
             try:
                 self.logger.debug("Decoding response")
                 response = response.json()  # type: ignore
+                self.logger.debug(f"{response=}")
 
             except JSONDecodeError as e:
-                raise UnableToGetResponse(
-                    f"Unable to decode API reponse.\n"
-                    "Posible submiting job process failed.\n"
-                    f"Decode error was -> {e}"
-                )
+                raise UnableToGetResponse(f"{e}. Posible failed to submit job.")
 
             if response.get("returncode") == 0:
                 self.logger.info(
@@ -162,14 +156,13 @@ class SparkSubmitter(BaseRequestHandler):
                 self.logger.error(f"Job stderr:\n{response.get('stderr')}")
 
                 raise UnableToSubmitJob(
-                    f"Unable to submit {job} job! API returned 1 code. See job output in logs"
+                    f"Unable to submit '{job}' job! API returned 1 code. See job output in logs"
                 )
             else:
                 raise UnableToSubmitJob(
-                    f"Unable to submit {job} job.\n" f"API response: {response}"
+                    f"Unable to submit '{job}' job. API returned code -> {response}"
                 )
         else:
             raise UnableToGetResponse(
-                f"Unable to submit {job} job. Something went wrong.\n"
-                f"API response status code: {response.status_code}"  # type: ignore
+                f"Unable to submit '{job}' job. Something went wrong. API response status code -> {response.status_code}"  # type: ignore
             )

@@ -6,7 +6,7 @@ from datetime import datetime, date
 
 
 class ArgsKeeper(BaseModel):
-    """Dataclass for keeping and validating Spark job parameters
+    """Keeping and validating Spark job arguments.
 
     ## Parameters
     `date`: The starting date from which the 'depth' argument is subtracted. Format: `%Y-%m-%d`\n
@@ -16,30 +16,32 @@ class ArgsKeeper(BaseModel):
     `processed_dttm`: Processed timestamp. Format: `%Y-%m-%dT%H:%M:%S`, defaults `None`
 
     ## Raises
-    `ValueError` : Raises if parameter don't pass validation
+    `ValueError` : Raises if parameter don't pass validation\n
     `UserWarning` : Raises for notify user about potenrial problems
 
     ## Examples
     >>> keeper = ArgsKeeper(
     ...     date="2022-04-03",
     ...     depth=10,
-    ...     src_path="s3a://data-ice-lake-05/messager-data/analytics/geo-events",
-    ...     tgt_path="s3a://data-ice-lake-05/messager-data/analytics/tmp",
+    ...     src_path="s3a://...",
+    ...     tgt_path="s3a://...",
     ...     processed_dttm="2023-05-22T12:03:25",
     ... )
+    >>> print(keeper)
+        Date: 2022-04-03
+        Depth: 10
+        Source path: s3a://...
+        Target path: s3a://...
+        Processed time: 2023-05-22T12:03:25
 
-    If validation don't pass:
-    >>> try:
-    ...     keeper = ArgsKeeper(
-    ...         date="2022-04-03",
-    ...         depth=10,
-    ...         src_path="s3a://data-ice-lake-05/messager-data/analytics/geo-events",
-    ...         tgt_path="s3a://data-ice-lake-05/messager-data/analytics/tmp",
-    ...         processed_dttm="2023-05-22", # <----- Ops!
-    ...     )
-    ... except ValidationError as e:
-    ...     logger.error(e)
-    [2023-05-26 11:12:23] {src.utils:56} ERROR: 1 validation error for ArgsKeeper
+    >>> keeper = ArgsKeeper(
+    ...     date="2022-04-03",
+    ...     depth=10,
+    ...     src_path="s3a://...",
+    ...     tgt_path="s3a://...",
+    ...     processed_dttm="2023-05-22",  # <----- Ops!
+    ... )
+    pydantic.error_wrappers.ValidationError: 1 validation error for ArgsKeeper
     processed_dttm
         must be '%Y-%m-%dT%H:%M:%S' format (type=value_error)
     """
@@ -48,7 +50,10 @@ class ArgsKeeper(BaseModel):
     depth: int
     src_path: str
     tgt_path: str
-    processed_dttm: str = None  # type: ignore
+    processed_dttm: str | None = None
+
+    def __str__(self) -> str:
+        return f"\tDate: {self.date}\n\tDepth: {self.depth}\n\tSource path: {self.src_path}\n\tTarget path: {self.tgt_path}\n\tProcessed time: {self.processed_dttm}"
 
     @validator("date")
     def validate_date(cls, v) -> str:
@@ -105,7 +110,7 @@ class ArgsKeeper(BaseModel):
 
 
 class SparkConfigKeeper(BaseModel):
-    """Dataclass for keeping Spark configuration properties
+    """Keeping and validating Spark configuration properties.
 
     ## Properties
     `executor_memory` : `spark.executor.memory` - Amount of memory to use per executor process, in the same format as JVM memory strings with a size unit suffix ("k", "m", "g" or "t") (e.g. 512m, 2g)\n
@@ -113,7 +118,7 @@ class SparkConfigKeeper(BaseModel):
     `max_executors_num` : `spark.dynamicAllocation.maxExecutors`\n
 
     ## Raises
-    `ValueError` : Raises if parameter don't pass validation
+    `ValueError` : Raises if parameter don't pass validation\n
     `UserWarning` : Raises for notify user about potenrial problems
 
     ## Notes

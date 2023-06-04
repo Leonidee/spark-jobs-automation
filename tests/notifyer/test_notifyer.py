@@ -8,8 +8,6 @@ from requests.exceptions import (
     HTTPError,
     InvalidSchema,
     Timeout,
-    InvalidURL,
-    MissingSchema,
     JSONDecodeError,
 )
 
@@ -70,7 +68,7 @@ class TestCollectTaskContext:
             e.value
         )
 
-    def test_raises_if_wrong_date_format(self, notifyer):
+    def test_raises_if_wrong_date_format_1(self, notifyer):
         context = dict(
             task_instance=MagicMock(
                 task_id="my_task_id",
@@ -83,7 +81,41 @@ class TestCollectTaskContext:
 
         assert e.type is AirflowContextError
         assert (
-            "time data '2022-01-01' does not match format '%Y-%m-%d %H:%M:%S'"
+            f"time data '{context['execution_date']}' does not match format '%Y-%m-%d %H:%M:%S'"
+            in str(e.value)
+        )
+
+    def test_raises_if_wrong_date_format_2(self, notifyer):
+        context = dict(
+            task_instance=MagicMock(
+                task_id="my_task_id",
+                dag_id="my_dag_id",
+            ),
+            execution_date="2022",
+        )
+        with pytest.raises(AirflowContextError) as e:
+            notifyer._collect_task_context(raw_context=context)
+
+        assert e.type is AirflowContextError
+        assert (
+            f"time data '{context['execution_date']}' does not match format '%Y-%m-%d %H:%M:%S'"
+            in str(e.value)
+        )
+
+    def test_raises_if_wrong_date_format_3(self, notifyer):
+        context = dict(
+            task_instance=MagicMock(
+                task_id="my_task_id",
+                dag_id="my_dag_id",
+            ),
+            execution_date="00:00:00",
+        )
+        with pytest.raises(AirflowContextError) as e:
+            notifyer._collect_task_context(raw_context=context)
+
+        assert e.type is AirflowContextError
+        assert (
+            f"time data '{context['execution_date']}' does not match format '%Y-%m-%d %H:%M:%S'"
             in str(e.value)
         )
 
@@ -230,23 +262,25 @@ class TestSendMessage:
         assert e.type is UnableToSendMessage
         assert err_msg in str(e.value)
 
-    @pytest.mark.actual  # todo этот вариант не рабоатет
-    @patch("src.notifyer.notifyer.requests.post")
-    def test_(self, notifyer, mock_post, airflow_context):
-        # with patch.object(notifyer, "__make_url") as mock_make_url:
-        #     mock_make_url.return_value = "http://example.com"
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"ok": True}
+class TestNotifyOnTaskFailure:
+    @patch("src.notifyer.notifyer.TelegramNotifyer._send_message")
+    def test_with_mock(self, mock_send_message, notifyer, airflow_context):
+        mock_send_message.return_value = True
 
-        mock_post.return_value = mock_response
+        result = notifyer.notify_on_task_failure(airflow_context=airflow_context)
 
-        assert notifyer.notify_on_task_failure(raw_context=airflow_context) is True
-        # err_msg = "Unable to send message"
+        assert result is True
 
-        # with pytest.raises(UnableToSendMessage) as e:
-        #     notifyer._send_message(url=MagicMock())
+    def test_send_real_message(self, notifyer):
+        airflow_context = dict(
+            task_instance=MagicMock(
+                task_id="test",
+                dag_id="test",
+            ),
+            execution_date="2022-01-01T00:00:00.000000",
+        )
 
-        # assert e.type is UnableToSendMessage
-        # assert err_msg in str(e.value)
+        result = notifyer.notify_on_task_failure(airflow_context=airflow_context)
+
+        assert result is True

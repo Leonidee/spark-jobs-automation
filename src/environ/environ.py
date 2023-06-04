@@ -15,7 +15,7 @@ from src.environ.exceptions import EnvironNotSet, DotEnvError
 
 
 class EnvironManager:
-    """Project environment manager.
+    """Project's environment manager.
 
     ## Examples
     Initialize Class instance:
@@ -32,7 +32,7 @@ class EnvironManager:
 
     If not set:
     >>> result = environ.check_environ(var='NOT_SET_VAR')
-    [2023-05-30 19:54:51] {src.environ.environ:83} CRITICAL: NOT_SET_VAR environment variable not set
+    [2023-05-30 19:54:51] {src.environ.environ:83} CRITICAL: NOT_SET_VAR environment variable not set # <---- prints to log
     src.environ.exception.EnvironNotSet: Environment variables not set properly. You can find list of required variables here -> $PROJECT_DIR/templates/.env.template # <---- raised exception
     """
 
@@ -41,27 +41,32 @@ class EnvironManager:
 
         self._find_dotenv = find_dotenv
         self._read_dotenv = load_dotenv
+
         self.logger = SparkLogger(level=config.python_log_level).get_logger(
             logger_name=__name__
         )
 
-    def load_environ(self, dotenv_file_name: str = ".env") -> bool:
+    def load_environ(self, dotenv_file_name: str | None = None) -> bool:
         """Find .env file and load environment variables from it.
 
         ## Notes
         Overrides system environment variables with same names.
 
-        `.env` file should located in root project directory. Notice the example one: `$PROJECT_DIR/templates/.env.template`
+        `.env` file should located in root project directory. You can find example with all variables required for the project here -> `$PROJECT_DIR/templates/.env.template`
 
         ## Parameters
-        `dotenv_file_name` : Path to .env file, by default ".env"
+        `dotenv_file_name` : Path to `.env` file, by default ".env"
 
         ## Raises
-        `DotEnvError` : Raise if enable to find or load .env
+        `DotEnvError` : Raise if enable to find or load file
 
         ## Returns
-        `bool` : Returns True if found file and loaded variables and False in other case
+        `bool` : Returns True if found file and loaded variables
         """
+
+        if not dotenv_file_name:
+            dotenv_file_name = ".env"
+
         self.logger.debug("Loading environ")
 
         self.logger.debug("Trying to find .env in project")
@@ -91,21 +96,32 @@ class EnvironManager:
         ...
 
     def check_environ(self, var) -> bool:
+        """Check if given variable/variables set in environment.
+
+        ## Parameters
+        `var` : Variable/variables to check.
+
+        ## Returns
+        `bool` : Returns True if all listed variables set to environment.
+
+        ## Raises
+        `EnvironNotSet` : Raises if one of the listed variable not set properly.
+        """
         _ERROR_MSG = "Environment variables not set properly. You can find list of required variables here -> $PROJECT_DIR/templates/.env.template"
         self.logger.debug("Checking if required envrion variables set")
 
         if isinstance(var, str):
-            self.logger.debug(f"Check: {var}")
+            self.logger.debug(f"Check: '{var}'")
             if var not in os.environ:
-                self.logger.critical(f"{var} environment variable not set")
+                self.logger.critical(f"'{var}' environment variable not set")
                 raise EnvironNotSet(_ERROR_MSG)
 
         if isinstance(var, Tuple):
             self.logger.debug(f"Vars to check: {len(var)}")
             for _ in var:
-                self.logger.debug(f"Check: {_}")
+                self.logger.debug(f"Check: '{_}'")
                 if _ not in os.environ:
-                    self.logger.critical(f"{_} environment variable not set")
+                    self.logger.critical(f"'{_}' environment variable not set")
 
             if not all(os.environ.get(_) for _ in var):
                 raise EnvironNotSet(_ERROR_MSG)

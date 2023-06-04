@@ -5,8 +5,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 import time
-from dataclasses import dataclass
-from enum import Enum
+from logging import getLogger
 
 from typing import TYPE_CHECKING
 
@@ -30,13 +29,16 @@ from src.environ import EnvironManager
 from src.notifyer.exceptions import UnableToSendMessage, AirflowContextError
 from src.notifyer.datamodel import AirflowTaskData, TelegramMessage, MessageType
 from src.base import BaseRequestHandler
+from src.logger import SparkLogger
 
 
 class TelegramNotifyer(BaseRequestHandler):
-    """Project Telegram notifyer. Sends messages about Airflow DAG health.
+    """Project's Telegram notifyer. Sends messages about Airflow DAG health.
 
     ## Notes
     The chat to which the messages will be sent and credentials should be specified in `.env` or as global evironment variables.
+
+    Required variables are: `TG_CHAT_ID` and `TG_BOT_TOKEN`
 
     See `.env.template` for more details.
     """
@@ -48,10 +50,24 @@ class TelegramNotifyer(BaseRequestHandler):
         retry_delay: int = 5,
         session_timeout: int = 60,
     ) -> None:
+        """
+
+        ## Parameters
+        `max_retries` : Max retries to send message, by default 3\n
+        `retry_delay` : Delay between retries in seconds, by default 5\n
+        `session_timeout` : Session timeout in seconds, by default 60
+        """
         super().__init__(
             max_retries=max_retries,
             retry_delay=retry_delay,
             session_timeout=session_timeout,
+        )
+        self.logger = (
+            getLogger("aiflow.task")
+            if self.config.IS_PROD
+            else SparkLogger(level=self.config.python_log_level).get_logger(
+                logger_name=__name__
+            )
         )
 
         environ = EnvironManager()
@@ -66,9 +82,28 @@ class TelegramNotifyer(BaseRequestHandler):
         environ.check_environ(var=_REQUIRED_VARS)  # type: ignore
 
     def __make_url(self, message: TelegramMessage) -> str:
+        """Make Telegram API URL to send message
+
+        ## Parameters
+        `message` : `TelegramMessage` instance contains message to send
+
+        ## Returns
+        `str` : Created URL
+        """
         return f"https://api.telegram.org/bot{self._BOT_TOKEN}/sendMessage?chat_id={self._CHAT_ID}&text={message}"
 
     def _collect_task_context(self, raw_context: Dict[Any, Any]) -> AirflowTaskData:  # type: ignore
+        """Collects given raw Airflow context object into `AirflowTaskData` instance
+
+        ## Parameters
+        `raw_context` : Raw Airflow context
+
+        ## Returns
+        `AirflowTaskData` : Airflow task instance data taken from raw context
+
+        ## Raises
+        `AirflowContextError` : Raises if unable to get context or one of the required keys
+        """
         for _TRY in range(1, self._MAX_RETRIES + 1):
             self.logger.debug("Collecting Airflow task context")
             self.logger.debug(f"{raw_context=}")
@@ -109,6 +144,20 @@ class TelegramNotifyer(BaseRequestHandler):
                     continue
 
     def _send_message(self, url: str) -> bool:  # type: ignore
+        """Sends message to given URL
+
+        ## Notes
+        Message which you want to send must be inside URL string. Use `__make_url` method to make one.
+
+        ## Parameters
+        `url` : Telegram API URL
+
+        ## Returns
+        `bool` : True if message was sent
+
+        ## Raises
+        `UnableToSendMessage` : Raises if unable to send message for some reason. Will provide detailed description about occured error
+        """
         self.logger.debug("Sending message")
         for _TRY in range(1, self._MAX_RETRIES + 1):
             try:
@@ -175,13 +224,13 @@ class TelegramNotifyer(BaseRequestHandler):
 
                     continue
 
-    def notify_on_task_failure(self, raw_context: Dict[Any, Any]) -> bool:
+    def notify_on_task_failure(self, airflow_context: Dict[Any, Any]) -> bool:
         """This function is designed to be used in the Airflow ecosystem and should be called from `default_args` `on_failure_callback` argument of either a DAG or Airflow task.
 
         The function is responsible for handling failures that occur during task execution.
 
         ## Parameters
-        `context` : Airflow task context. Will be parsed to get information about task execution, errors etc.
+        `airflow_context` : Airflow task context dictionary
 
         ## Examples
         Example of usage with Airflow task:
@@ -193,14 +242,12 @@ class TelegramNotifyer(BaseRequestHandler):
         ...          "on_failure_callback": notifyer.notify_on_task_failure, # <---- here
         ...      },
         ... )
-        ... def start_cluster() -> None:
-        ...      "Start DataProc Cluster"
-        ...      cluster.start()
-
+        ... def some_task() -> None:
+        ...      ...
         """
 
         message = TelegramMessage(
-            task_data=self._collect_task_context(raw_context=raw_context),
+            task_data=self._collect_task_context(raw_context=airflow_context),
             type=MessageType("failed"),
         )
 
