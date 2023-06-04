@@ -17,19 +17,10 @@ from src.config.exceptions import EnableToGetConfig
 
 
 class Config:
-    """Parses project configuration file. By default file named `config.yaml` and located in project root directory.
-
-    File contains configurations for Spark Jobs and project environment.
-
-    ## Parameters
-    `config_name` : Name of config file to search in project directory, defults `config.yaml`
-
-    ## Raises
-    `EnableToGetConfig` : Raise if enable to find or load config file
-    `ValueError` : If wrong config name specified
+    """Parses project's configuration file.
 
     ## Notes
-    Confinguration file should be located in root project directory.
+    Confinguration file should be located in one of the project's dirs.
 
     ## Examples
     Initialize Class instance:
@@ -56,11 +47,25 @@ class Config:
     def __init__(
         self, config_name: str = None, config_path: PathLike[str] | Path = None  # type: ignore
     ) -> None:
+        """
+
+        ## Notes
+        To init class instance you need to specify one of the required arguments: `config_name` or `config_path`.
+
+        ## Parameters
+        `config_name` : Config file name, by default None\n
+        `config_path` : Path to config file, by default None
+
+        ## Raises
+        `ValueError` : If failed to validate config file name or if one of the required arguments not specified\n
+        `EnableToGetConfig` : If unable to find or read config file
+        """
         if config_name:
             self._validate_config_name(name=config_name)
             self._CONFIG_NAME = config_name
             self._CONFIG_PATH = self._find_config()
         elif config_path:
+            self._validate_config_name(name=str(config_path).split("/")[-1])
             self._CONFIG_PATH = config_path
         else:
             raise ValueError(

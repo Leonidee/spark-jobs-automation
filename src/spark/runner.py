@@ -13,7 +13,8 @@ from botocore.exceptions import ClientError
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
 from src.logger import SparkLogger
-from src.environ import EnvironError, EnvironManager
+from src.environ import EnvironManager
+from src.helper import SparkHelper
 
 os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
 os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
@@ -31,12 +32,12 @@ from pyspark.storagelevel import StorageLevel
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import List, Literal
+    from typing import List, Literal, Set
     from pyspark.sql import DataFrame
     from src.keeper import ArgsKeeper, SparkConfigKeeper
 
 
-class SparkRunner:
+class SparkRunner(SparkHelper):
     """Data processor and datamarts collector class.
 
     ## Usage
@@ -66,101 +67,11 @@ class SparkRunner:
     """
 
     def __init__(self) -> None:
-        config = Config()
+        super().__init__()
 
-        self.logger = SparkLogger(level=config.python_log_level).get_logger(
+        self.logger = SparkLogger(level=self.config.python_log_level).get_logger(
             logger_name=__name__
         )
-        try:
-            env = EnvironManager()
-            env.load_environ()
-        except EnvironError as e:
-            self.logger.critical(e)
-
-    def _get_s3_instance(self):
-        "Get ready-to-use boto3 S3 connection instance"
-
-        self.logger.debug("Getting s3 connection instace")
-
-        s3 = boto3.session.Session().client(  # type: ignore
-            service_name="s3",
-            endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-        )
-        self.logger.debug(f"Boto3 instance: {s3}")
-        return s3
-
-    def _get_src_paths(
-        self,
-        event_type: Literal["message", "reaction", "subscription"],
-        keeper: ArgsKeeper,
-    ) -> List[str]:
-        """Get S3 paths contains dataset partitions.
-
-        Collects paths corresponding to the passed in `keeper` object arguments and checks if each path exists on S3. Collects only existing paths.
-
-        If no paths for given arguments kill process.
-
-        ## Parameters
-        `event_type` : Event type of partitions
-        `keeper` : Dataclass-like object with Spark Job arguments
-
-        ## Returns
-        `List[str]` : List with existing partition paths on s3
-
-        ## Examples
-        >>> keeper = ArgsKeeper(date="2022-03-12", depth=10, ..., src_path="s3a://data-ice-lake-05/messager-data/analytics/geo-events")
-        >>> src_paths = self._get_src_paths(event_type="message", keeper=keeper)
-        >>> print(len(src_paths))
-        4 # only 4 paths exists on s3
-        >>> print(type(src_paths))
-        <class 'list'>
-        >>> for _ in src_paths: print(_) # how it looks
-        "s3a://data-ice-lake-05/messager-data/analytics/geo-events/event_type=message/date=2022-03-12"
-        ...
-        "s3a://data-ice-lake-05/messager-data/analytics/geo-events/event_type=message/date=2022-03-11"
-        """
-        s3 = self._get_s3_instance()
-
-        self.logger.debug(f"Collecting src paths for {event_type} event type")
-
-        date = datetime.strptime(keeper.date, "%Y-%m-%d").date()
-
-        paths = [
-            f"{keeper.src_path}/event_type={event_type}/date="
-            + str(date - timedelta(days=i))
-            for i in range(int(keeper.depth))
-        ]
-
-        self.logger.debug("Checking if each path exists on s3")
-
-        existing_paths = []
-        for path in paths:
-            self.logger.debug(f"Checking {path}")
-            try:
-                response = s3.list_objects(
-                    Bucket=path.split(sep="/")[2],
-                    MaxKeys=5,
-                    Prefix="/".join(path.split(sep="/")[3:]),
-                )
-                if "Contents" in response.keys():
-                    existing_paths.append(path)
-                    self.logger.debug("OK")
-                else:
-                    self.logger.debug(f"No data for `{path}` on s3. Skipping")
-            except ClientError as e:
-                self.logger.exception(e)
-                sys.exit(1)
-
-        # if returns empty list - exit
-        if existing_paths == []:
-            self.logger.error("There is no data for given arguments!")
-            sys.exit(1)
-
-        self.logger.debug(f"Done. {len(existing_paths)} paths collected")
-
-        return existing_paths
 
     def init_session(
         self,
@@ -177,16 +88,14 @@ class SparkRunner:
         `spark_conf` : `SparkConfigKeeper` object with Spark configuration properties
         `log4j_level` : Spark Context Java logging level, by default "WARN"
         """
-
+        # ? imort Spark etc here?
         self.logger.info("Initializing Spark Session")
 
         self.spark = (
             SparkSession.builder.master("yarn")
-            .config("spark.hadoop.fs.s3a.access.key", os.getenv("AWS_ACCESS_KEY_ID"))
-            .config(
-                "spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY")
-            )
-            .config("spark.hadoop.fs.s3a.endpoint", os.getenv("AWS_ENDPOINT_URL"))
+            .config("spark.hadoop.fs.s3a.access.key", self.AWS_ACCESS_KEY_ID)
+            .config("spark.hadoop.fs.s3a.secret.key", self.AWS_SECRET_ACCESS_KEY)
+            .config("spark.hadoop.fs.s3a.endpoint", self.AWS_ENDPOINT_URL)
             .config(
                 "spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem"
             )
@@ -632,7 +541,7 @@ class SparkRunner:
         self.logger.info("Writing results")
 
         processed_dt = datetime.strptime(
-            keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S"
+            keeper.processed_dttm.replace("T", " "), r"%Y-%m-%d %H:%M:%S"
         ).date()
         OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
         try:

@@ -15,23 +15,20 @@ from src.keeper import ArgsKeeper
 
 
 def main():
-    keeper = ArgsKeeper(
-        date="2022-04-03",
-        depth=10,
-        src_path="s3a://...",
-        tgt_path="s3a://...",
-        processed_dttm="2023-05-22T12:03:25",
-    )
-    print(keeper)
+    class Test:
+        def __init__(self) -> None:
+            pass
 
-    keeper = ArgsKeeper(
-        date="2022-04-03",
-        depth=10,
-        src_path="s3a://...",
-        tgt_path="s3a://...",
-        processed_dttm="2023-05-22",
-    )
-    print(keeper)
+        def print_some(self):
+            print("some!")
+
+    class DoTest(Test):
+        def __init__(self) -> None:
+            super().__init__()
+
+    do_test = DoTest()
+
+    do_test.print_some()
 
 
 if __name__ == "__main__":

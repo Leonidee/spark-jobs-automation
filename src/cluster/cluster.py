@@ -87,15 +87,16 @@ class DataProcCluster(BaseRequestHandler):
             "YC_IAM_TOKEN",
         )
 
+        if (
+            _REQUIRED_VARS[3] not in os.environ
+        ):  # checking if 'YC_IAM_TOKEN' set as environ, because most likely not
+            self._get_iam_token()
+
+        environ.check_environ(var=_REQUIRED_VARS)  # type: ignore
+
         self._CLUSTER_ID, self._BASE_URL, self._OAUTH_TOKEN, self._IAM_TOKEN = map(
             os.getenv, _REQUIRED_VARS
         )
-
-        if not self._IAM_TOKEN:
-            self._get_iam_token()
-            self._IAM_TOKEN = os.getenv("YC_IAM_TOKEN")
-
-        environ.check_environ(var=_REQUIRED_VARS)  # type: ignore
 
     def _get_iam_token(self) -> bool:  # type: ignore
         """

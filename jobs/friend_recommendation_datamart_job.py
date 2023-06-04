@@ -6,11 +6,12 @@ from pyspark.sql.utils import AnalysisException, CapturedException
 # package
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config
-from src.utils import SparkLogger
+from src.logger import SparkLogger
 from src.spark import SparkRunner
 from src.keeper import ArgsKeeper, SparkConfigKeeper
 
-config = Config()
+
+config = Config(config_name="config.yaml")
 
 logger = SparkLogger(level=config.python_log_level).get_logger(logger_name=__name__)
 
@@ -37,9 +38,10 @@ def main() -> None:
             executor_memory="3000m", executor_cores=1, max_executors_num=12
         )
 
-    except (IndexError, KeyError) as e:
-        logger.exception(e)
+    except (KeyError, IndexError) as e:
+        logger.error(e)
         sys.exit(1)
+
     try:
         spark = SparkRunner()
         spark.init_session(
@@ -49,7 +51,7 @@ def main() -> None:
         )
         spark.collect_friend_recommendation_datamart(keeper=keeper)
 
-    except (CapturedException, AnalysisException) as e:
+    except (CapturedException, AnalysisException) as e:  # ? какие исключения нужны тут?
         logger.exception(e)
         sys.exit(1)
 

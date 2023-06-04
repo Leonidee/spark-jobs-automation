@@ -83,9 +83,9 @@ class SparkSubmitter(BaseRequestHandler):
         environ.load_environ()
 
         _REQUIRED_VAR = "CLUSTER_API_BASE_URL"
+        environ.check_environ(var=_REQUIRED_VAR)
 
         self._API_BASE_URL = os.getenv(_REQUIRED_VAR)
-        environ.check_environ(var=_REQUIRED_VAR)
 
     def submit_job(self, job: Literal["users_info_datamart_job", "location_zone_agg_datamart_job", "friend_recommendation_datamart_job"], keeper: ArgsKeeper) -> bool:  # type: ignore
         """Sends request to API to submit Spark job in Hadoop Cluster.
@@ -144,9 +144,8 @@ class SparkSubmitter(BaseRequestHandler):
                 raise UnableToGetResponse(f"{e}. Posible failed to submit job.")
 
             if response.get("returncode") == 0:
-                self.logger.info(
-                    f"{job} job was submitted successfully! Results -> {keeper.tgt_path}"
-                )
+                self.logger.info(f"{job} job was submitted successfully!")
+
                 self.logger.debug(f"Job stdout:\n{response.get('stdout')}")
                 self.logger.debug(f"Job stderr:\n{response.get('stderr')}")
                 return True
