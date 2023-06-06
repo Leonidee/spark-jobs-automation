@@ -13,29 +13,16 @@ from botocore.exceptions import ClientError
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from typing import TYPE_CHECKING
 
-from src.config import Config
-from src.environ import EnvironManager
 from src.helper import SparkHelper
 from src.logger import SparkLogger
 
-# os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
-# os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
-# os.environ["JAVA_HOME"] = "/usr/bin/java"
-# os.environ["SPARK_HOME"] = "/usr/lib/spark"
-# os.environ["PYTHONPATH"] = "/opt/conda/bin/python3"
 
-# findspark.init()
-# findspark.find()
-
-
-# import pyspark.sql.functions as f
-# from pyspark.sql import SparkSession, Window
 # from pyspark.storagelevel import StorageLevel
 
 if TYPE_CHECKING:
     from typing import List, Literal, Set, Tuple
 
-    from pyspark.sql import DataFrame
+    from pyspark.sql import DataFrame  # type: ignore
 
     from src.keeper import ArgsKeeper, SparkConfigKeeper
 
@@ -101,7 +88,7 @@ class SparkRunner(SparkHelper):
         findspark.init(spark_home=self.SPARK_HOME, python_path=self.PYTHONPATH)
         findspark.find()
 
-        from pyspark.sql import SparkSession
+        from pyspark.sql import SparkSession  # type: ignore
 
         self.spark = (
             SparkSession.builder.master("yarn")
@@ -182,9 +169,9 @@ class SparkRunner(SparkHelper):
         """
         self.logger.debug("Computing distances")
 
-        from pyspark.sql.functions import asin, col, cos, radians
-        from pyspark.sql.functions import round as _round
-        from pyspark.sql.functions import sin, sqrt
+        from pyspark.sql.functions import asin, col, cos, radians  # type: ignore
+        from pyspark.sql.functions import round as _round  # type: ignore
+        from pyspark.sql.functions import sin, sqrt  # type: ignore
 
         if len(coord_cols_prefix) > 2:
             raise IndexError(
@@ -265,13 +252,13 @@ class SparkRunner(SparkHelper):
         """
         self.logger.debug(f"Collecting location for '{event_type}' event type")
 
-        from pyspark.sql.functions import asc, col, row_number
+        from pyspark.sql.functions import asc, col, row_number  # type: ignore
+        from pyspark.sql import Window  # type: ignore
 
         self.logger.debug(
             f"Getting cities coordinates dataframe from S3. Path: {cities_coord_path}"
         )
         cities_coords_sdf = self.spark.read.parquet(cities_coord_path)
-        #  "s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates"
 
         partition_by = (
             ["user_id", "subscription_channel"]
@@ -344,8 +331,8 @@ class SparkRunner(SparkHelper):
         """
         self.logger.debug("Collecting users actual data dataframe")
 
-        from pyspark.sql import Window
-        from pyspark.sql.functions import col, desc, first, from_utc_timestamp, when
+        from pyspark.sql import Window  # type: ignore
+        from pyspark.sql.functions import col, desc, first, from_utc_timestamp, when  # type: ignore
 
         self.logger.debug(f"Getting input data from: '{keeper.src_path}'")
 
@@ -472,8 +459,8 @@ class SparkRunner(SparkHelper):
         """
         self.logger.info("Starting collecting 'users-info-datamart'")
 
-        from pyspark.sql import Window
-        from pyspark.sql.functions import (
+        from pyspark.sql import Window  # type: ignore
+        from pyspark.sql.functions import (  # type: ignore
             arrays_zip,
             asc,
             col,
@@ -576,7 +563,7 @@ class SparkRunner(SparkHelper):
         self.logger.info("Writing results")
 
         processed_dt = datetime.strptime(
-            keeper.processed_dttm.replace("T", " "), r"%Y-%m-%d %H:%M:%S"
+            keeper.processed_dttm.replace("T", " "), r"%Y-%m-%d %H:%M:%S"  # type: ignore
         ).date()
         OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
         try:
@@ -644,7 +631,20 @@ class SparkRunner(SparkHelper):
         |3      |2022-03-28|2022-03-01|160         |181          |16878            |148      |1190         |1068          |99175             |1121      |
         +-------+----------+----------+------------+-------------+-----------------+---------+-------------+--------------+------------------+----------+
         """
-        self.logger.info("Staring collecting location zone aggregated datamart")
+        self.logger.info("Staring collecting 'location_zone_agg_datamart'")
+
+        from pyspark.sql import Window  # type: ignore
+        from pyspark.storagelevel import StorageLevel  # type: ignore
+        from pyspark.sql.functions import (  # type: ignore
+            asc,
+            col,
+            lit,
+            when,
+            trunc,
+            count as _count,
+            first,
+        )
+
         job_start = datetime.now()
 
         self.logger.debug("Collecing messages dataframe. Processing...")
@@ -668,27 +668,29 @@ class SparkRunner(SparkHelper):
             )
             .withColumn(
                 "msg_ts",
-                f.when(f.col("message_ts").isNotNull(), f.col("message_ts")).otherwise(
-                    f.col("datetime")
+                when(col("message_ts").isNotNull(), col("message_ts")).otherwise(
+                    col("datetime")
                 ),
             )
             .drop_duplicates(subset=["user_id", "message_id", "msg_ts"])
             .drop("datetime", "message_ts")
         )
         messages_sdf = self._get_event_location(
-            dataframe=messages_sdf, event_type="message"
+            dataframe=messages_sdf,
+            event_type="message",
+            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
         )
 
         messages_sdf = (
             messages_sdf.withColumnRenamed("city_id", "zone_id")
-            .withColumn("week", f.trunc(f.col("msg_ts"), "week"))
-            .withColumn("month", f.trunc(f.col("msg_ts"), "month"))
+            .withColumn("week", trunc(col("msg_ts"), "week"))
+            .withColumn("month", trunc(col("msg_ts"), "month"))
             .groupby("month", "week", "zone_id")
-            .agg(f.count("message_id").alias("week_message"))
+            .agg(_count("message_id").alias("week_message"))
             .withColumn(
                 "month_message",
-                f.sum(f.col("week_message")).over(
-                    Window().partitionBy(f.col("zone_id"), f.col("month"))
+                sum(col("week_message")).over(
+                    Window().partitionBy(col("zone_id"), col("month"))
                 ),
             )
             .persist(storageLevel=StorageLevel.MEMORY_ONLY)
@@ -713,22 +715,24 @@ class SparkRunner(SparkHelper):
                 reaction_sdf.lon.alias("event_lon"),
             )
             .drop_duplicates(subset=["user_id", "message_id", "datetime"])
-            .where(f.col("event_lat").isNotNull())
+            .where(col("event_lat").isNotNull())
         )
         reaction_sdf = self._get_event_location(
-            dataframe=reaction_sdf, event_type="reaction"
+            dataframe=reaction_sdf,
+            event_type="reaction",
+            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
         )
         reaction_sdf = (
             reaction_sdf.withColumnRenamed("city_id", "zone_id")
-            .where(f.col("event_lat").isNotNull())
-            .withColumn("week", f.trunc(f.col("datetime"), "week"))
-            .withColumn("month", f.trunc(f.col("datetime"), "month"))
+            .where(col("event_lat").isNotNull())
+            .withColumn("week", trunc(col("datetime"), "week"))
+            .withColumn("month", trunc(col("datetime"), "month"))
             .groupby("month", "week", "zone_id")
-            .agg(f.count("message_id").alias("week_reaction"))
+            .agg(_count("message_id").alias("week_reaction"))
             .withColumn(
                 "month_reaction",
-                f.sum(f.col("week_reaction")).over(
-                    Window().partitionBy(f.col("zone_id"), f.col("month"))
+                sum(col("week_reaction")).over(
+                    Window().partitionBy(col("zone_id"), col("month"))
                 ),
             )
             .persist(storageLevel=StorageLevel.MEMORY_ONLY)
@@ -755,42 +759,42 @@ class SparkRunner(SparkHelper):
             )
             .withColumn(
                 "msg_ts",
-                f.when(f.col("message_ts").isNotNull(), f.col("message_ts")).otherwise(
-                    f.col("datetime")
+                when(col("message_ts").isNotNull(), col("message_ts")).otherwise(
+                    col("datetime")
                 ),
             )
             .drop_duplicates(subset=["user_id", "message_id", "msg_ts"])
             .drop("datetime", "message_ts")
             .withColumn(
                 "registration_ts",
-                f.first(col="msg_ts", ignorenulls=True).over(
-                    Window().partitionBy("user_id").orderBy(f.asc("msg_ts"))
+                first(col="msg_ts", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(asc("msg_ts"))
                 ),
             )
             .withColumn(
                 "is_reg",
-                f.when(f.col("registration_ts") == f.col("msg_ts"), f.lit(1)).otherwise(
-                    f.lit(0)
-                ),
+                when(col("registration_ts") == col("msg_ts"), lit(1)).otherwise(lit(0)),
             )
-            .where(f.col("is_reg") == f.lit(1))
+            .where(col("is_reg") == lit(1))
             .drop("is_reg", "registration_ts")
         )
         registrations_sdf = self._get_event_location(
-            dataframe=registrations_sdf, event_type="registration"
+            dataframe=registrations_sdf,
+            event_type="registration",
+            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
         )
 
         registrations_sdf = (
             registrations_sdf.withColumnRenamed("city_id", "zone_id")
-            .where(f.col("event_lat").isNotNull())
-            .withColumn("week", f.trunc(f.col("msg_ts"), "week"))
-            .withColumn("month", f.trunc(f.col("msg_ts"), "month"))
+            .where(col("event_lat").isNotNull())
+            .withColumn("week", trunc(col("msg_ts"), "week"))
+            .withColumn("month", trunc(col("msg_ts"), "month"))
             .groupby("month", "week", "zone_id")
-            .agg(f.count("user_id").alias("week_user"))
+            .agg(_count("user_id").alias("week_user"))
             .withColumn(
                 "month_user",
-                f.sum(f.col("week_user")).over(
-                    Window().partitionBy(f.col("zone_id"), f.col("month"))
+                sum(col("week_user")).over(
+                    Window().partitionBy(col("zone_id"), col("month"))
                 ),
             )
             .persist(storageLevel=StorageLevel.MEMORY_ONLY)
@@ -814,23 +818,25 @@ class SparkRunner(SparkHelper):
                 subscriptions_sdf.lon.alias("event_lon"),
             )
             .drop_duplicates(subset=["user_id", "subscription_channel", "datetime"])
-            .where(f.col("event_lat").isNotNull())
+            .where(col("event_lat").isNotNull())
         )
 
         subscriptions_sdf = self._get_event_location(
-            dataframe=subscriptions_sdf, event_type="subscription"
+            dataframe=subscriptions_sdf,
+            event_type="subscription",
+            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
         )
         subscriptions_sdf = (
             subscriptions_sdf.withColumnRenamed("city_id", "zone_id")
-            .where(f.col("event_lat").isNotNull())
-            .withColumn("week", f.trunc(f.col("datetime"), "week"))
-            .withColumn("month", f.trunc(f.col("datetime"), "month"))
+            .where(col("event_lat").isNotNull())
+            .withColumn("week", trunc(col("datetime"), "week"))
+            .withColumn("month", trunc(col("datetime"), "month"))
             .groupby("month", "week", "zone_id")
-            .agg(f.count("user_id").alias("week_subscription"))
+            .agg(_count("user_id").alias("week_subscription"))
             .withColumn(
                 "month_subscription",
-                f.sum(f.col("week_subscription")).over(
-                    Window().partitionBy(f.col("zone_id"), f.col("month"))
+                sum(col("week_subscription")).over(
+                    Window().partitionBy(col("zone_id"), col("month"))
                 ),
             )
             .persist(storageLevel=StorageLevel.MEMORY_ONLY)
@@ -869,7 +875,7 @@ class SparkRunner(SparkHelper):
         self.logger.info("Writing results")
 
         processed_dt = datetime.strptime(
-            keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S"
+            keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S"  # type: ignore
         ).date()
         OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
         try:
@@ -919,6 +925,18 @@ class SparkRunner(SparkHelper):
         self.logger.info("Starting collecting friend recommendations datamart")
         job_start = datetime.now()
 
+        from pyspark.sql import Window  # type: ignore
+        from pyspark.storagelevel import StorageLevel  # type: ignore
+        from pyspark.sql.functions import (  # type: ignore
+            explode,
+            array,
+            col,
+            when,
+            lit,
+            first,
+            asc,
+        )
+
         messages_src_paths = self._get_src_paths(keeper=keeper, event_type="message")
         real_contacts_sdf = (
             self.spark.read.option("mergeSchema", "true")
@@ -937,13 +955,13 @@ class SparkRunner(SparkHelper):
             )
             .withColumn(
                 "user_id",
-                f.explode(f.array(f.col("message_from"), f.col("message_to"))),
+                explode(array(col("message_from"), col("message_to"))),
             )
             .withColumn(
                 "contact_id",
-                f.when(
-                    f.col("user_id") == f.col("message_from"), f.col("message_to")
-                ).otherwise(f.col("message_from")),
+                when(
+                    col("user_id") == col("message_from"), col("message_to")
+                ).otherwise(col("message_from")),
             )
             .select("user_id", "contact_id")
             .distinct()
@@ -981,7 +999,7 @@ class SparkRunner(SparkHelper):
                 on="subscription_channel",
                 how="cross",
             )
-            .where(f.col("left_user") != f.col("right_user"))
+            .where(col("left_user") != col("right_user"))
             # .repartition(92, "left_user", "right_user")
             # .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
@@ -1015,17 +1033,17 @@ class SparkRunner(SparkHelper):
             )
             .withColumn(
                 "msg_ts",
-                f.when(f.col("message_ts").isNotNull(), f.col("message_ts")).otherwise(
-                    f.col("datetime")
+                when(col("message_ts").isNotNull(), col("message_ts")).otherwise(
+                    col("datetime")
                 ),
             )
             .withColumn(
                 "last_msg_ts",
-                f.first(col="msg_ts", ignorenulls=True).over(
-                    Window().partitionBy("user_id").orderBy(f.asc("msg_ts"))
+                first(col="msg_ts", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(asc("msg_ts"))
                 ),
             )
-            .where(f.col("msg_ts") == f.col("last_msg_ts"))
+            .where(col("msg_ts") == col("last_msg_ts"))
             .select("user_id", "event_lat", "event_lon")
             .distinct()
             # .repartitionByRange(92, "user_id")
@@ -1037,9 +1055,9 @@ class SparkRunner(SparkHelper):
         users_for_rec = (
             users_for_rec.join(
                 messages_sdf.select(
-                    f.col("user_id"),
-                    f.col("event_lat").alias("left_user_lat"),
-                    f.col("event_lon").alias("left_user_lon"),
+                    col("user_id"),
+                    col("event_lat").alias("left_user_lat"),
+                    col("event_lon").alias("left_user_lon"),
                 ),
                 how="left",
                 on=[users_for_rec.left_user == messages_sdf.user_id],
@@ -1047,21 +1065,21 @@ class SparkRunner(SparkHelper):
             .drop("user_id")
             .join(
                 messages_sdf.select(
-                    f.col("user_id"),
-                    f.col("event_lat").alias("right_user_lat"),
-                    f.col("event_lon").alias("right_user_lon"),
+                    col("user_id"),
+                    col("event_lat").alias("right_user_lat"),
+                    col("event_lon").alias("right_user_lon"),
                 ),
                 how="left",
                 on=[users_for_rec.right_user == messages_sdf.user_id],
             )
             .drop("user_id")
-            .where(f.col("left_user_lat").isNotNull())
-            .where(f.col("right_user_lat").isNotNull())
+            .where(col("left_user_lat").isNotNull())
+            .where(col("right_user_lat").isNotNull())
             # .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
 
         sdf = self._compute_distance(
-            dataframe=users_for_rec, coord_cols_prefix=["left_user", "right_user"]
+            dataframe=users_for_rec, coord_cols_prefix=("left_user", "right_user")
         )
 
         users_info_sdf = self._get_users_actual_data_dataframe(keeper=keeper)
@@ -1080,14 +1098,12 @@ class SparkRunner(SparkHelper):
                 on=[sdf.left_user == users_info_sdf.user_id],
                 how="left",
             )
-            .withColumn(
-                "processed_dttm", f.lit(keeper.processed_dttm.replace("T", " "))
-            )
+            .withColumn("processed_dttm", lit(keeper.processed_dttm.replace("T", " ")))  # type: ignore
             .select(
                 "left_user",
                 "right_user",
                 "processed_dttm",
-                f.col("act_city_id").alias("zone_id"),
+                col("act_city_id").alias("zone_id"),
                 "local_time",
             )
         )
@@ -1124,7 +1140,7 @@ class SparkRunner(SparkHelper):
         job_end = datetime.now()
         self.logger.info(f"Job execution time: {job_end - job_start}")
 
-    def __move_data__(self):
+    def _move_data(self, source_path: str, tgt_path: str):
         "Moves data between DWH layers. This method not for public calling"
 
         job_start = datetime.now()
@@ -1141,7 +1157,7 @@ class SparkRunner(SparkHelper):
             .withColumn("channel_id", df.event.channel_id)
             .withColumn(
                 "datetime",
-                f.to_timestamp(col=df.event.datetime, format="yyyy-MM-dd HH:mm:ss"),
+                to_timestamp(col=df.event.datetime, format="yyyy-MM-dd HH:mm:ss"),
             )
             .withColumn("media_type", df.event.media.media_type)
             .withColumn("media_src", df.event.media.src)
@@ -1153,8 +1169,8 @@ class SparkRunner(SparkHelper):
             .withColumn("message_to", df.event.message_to)
             .withColumn(
                 "message_ts",
-                f.to_timestamp(
-                    f.split(str=df.event.message_ts, pattern="\.").getItem(0),
+                to_timestamp(
+                    split(str=df.event.message_ts, pattern="\.").getItem(0),
                     format="yyyy-MM-dd HH:mm:ss",
                 ),
             )
@@ -1165,7 +1181,7 @@ class SparkRunner(SparkHelper):
             .withColumn("tags", df.event.tags)
             .withColumn("user", df.event.user)
             .withColumn("event_type", df.event_type)
-            .withColumn("date", f.date_format("datetime", "yyyy-MM-dd"))
+            .withColumn("date", date_format("datetime", "yyyy-MM-dd"))
             .withColumn("lat", df.lat)
             .withColumn("lon", df.lon)
             .select(

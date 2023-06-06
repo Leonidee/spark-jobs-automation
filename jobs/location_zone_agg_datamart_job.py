@@ -1,17 +1,17 @@
 import sys
 from pathlib import Path
 
-from pyspark.sql.utils import AnalysisException, CapturedException
+from pyspark.sql.utils import AnalysisException, CapturedException  # type: ignore
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config
-from src.utils import SparkLogger
+from src.logger import SparkLogger
 from src.spark import SparkRunner
 from src.keeper import ArgsKeeper, SparkConfigKeeper
 
-config = Config()
 
+config = Config("config.yaml")
 
 logger = SparkLogger(level=config.python_log_level).get_logger(logger_name=__name__)
 
@@ -56,6 +56,7 @@ def main() -> None:
 
     finally:
         spark.stop_session()  # type: ignore
+        sys.exit(2)
 
 
 if __name__ == "__main__":

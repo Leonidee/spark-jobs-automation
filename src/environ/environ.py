@@ -73,7 +73,7 @@ class EnvironManager:
             _PATH = self._find_dotenv(
                 filename=dotenv_file_name, raise_error_if_not_found=True
             )
-            self.logger.debug(f"File found. Path to file: {_PATH}")
+            self.logger.debug(f"File found. Path to file: '{_PATH}'")
         except IOError:
             raise DotEnvError(".env file not found. Environ not loaded")
 

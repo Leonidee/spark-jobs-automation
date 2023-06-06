@@ -16,18 +16,7 @@ from src.keeper import ArgsKeeper
 
 
 def main():
-    environ = EnvironManager()
-    environ.load_environ()
 
-    _REQUIRED_VARS = (
-        "HADOOP_CONF_DIR",
-        "YARN_CONF_DIR",
-        "JAVA_HOME",
-        "SPARK_HOME",
-        "PYTHONPATH",
-    )
-
-    environ.check_environ(var=_REQUIRED_VARS)
 
 
 if __name__ == "__main__":

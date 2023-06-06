@@ -10,11 +10,9 @@ import boto3
 from botocore.exceptions import ClientError
 
 if TYPE_CHECKING:
-    from typing import List, Literal, Set, Tuple
+    from typing import Literal, Tuple
 
-    from pyspark.sql import DataFrame
-
-    from src.keeper import ArgsKeeper, SparkConfigKeeper
+    from src.keeper import ArgsKeeper
 
 
 # package

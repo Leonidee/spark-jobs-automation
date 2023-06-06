@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
+from typing import Union
 
 from pydantic import BaseModel, validator
 
@@ -51,7 +52,7 @@ class ArgsKeeper(BaseModel):
     depth: int
     src_path: str
     tgt_path: str
-    processed_dttm: str | None = None
+    processed_dttm: Union[str, None] = None
 
     def __str__(self) -> str:
         return f"\tDate: {self.date}\n\tDepth: {self.depth}\n\tSource path: {self.src_path}\n\tTarget path: {self.tgt_path}\n\tProcessed time: {self.processed_dttm}"
