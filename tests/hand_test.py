@@ -1,34 +1,33 @@
 import os
 import sys
-from pathlib import Path
 import time
-from typing import Literal
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import Enum
+from pathlib import Path
+from typing import Literal
 
 from requests.exceptions import JSONDecodeError
-from dataclasses import dataclass
-from datetime import datetime
 
 sys.path.append(str(Path(__file__).parent.parent))
 
+from src.environ import EnvironManager
 from src.keeper import ArgsKeeper
 
 
 def main():
-    class Test:
-        def __init__(self) -> None:
-            pass
+    environ = EnvironManager()
+    environ.load_environ()
 
-        def print_some(self):
-            print("some!")
+    _REQUIRED_VARS = (
+        "HADOOP_CONF_DIR",
+        "YARN_CONF_DIR",
+        "JAVA_HOME",
+        "SPARK_HOME",
+        "PYTHONPATH",
+    )
 
-    class DoTest(Test):
-        def __init__(self) -> None:
-            super().__init__()
-
-    do_test = DoTest()
-
-    do_test.print_some()
+    environ.check_environ(var=_REQUIRED_VARS)
 
 
 if __name__ == "__main__":

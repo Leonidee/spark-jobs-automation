@@ -11,30 +11,38 @@ from botocore.exceptions import ClientError
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.config import Config
-from src.logger import SparkLogger
-from src.environ import EnvironManager
-from src.helper import SparkHelper
-
-os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
-os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
-os.environ["JAVA_HOME"] = "/usr/bin/java"
-os.environ["SPARK_HOME"] = "/usr/lib/spark"
-os.environ["PYTHONPATH"] = "/opt/conda/bin/python3"
-
-findspark.init()
-findspark.find()
-
-import pyspark.sql.functions as f
-from pyspark.sql import SparkSession, Window
-from pyspark.storagelevel import StorageLevel
-
 from typing import TYPE_CHECKING
 
+from src.config import Config
+from src.environ import EnvironManager
+from src.helper import SparkHelper
+from src.logger import SparkLogger
+
+# os.environ["HADOOP_CONF_DIR"] = "/usr/bin/hadoop/conf"
+# os.environ["YARN_CONF_DIR"] = "/usr/bin/hadoop/conf"
+# os.environ["JAVA_HOME"] = "/usr/bin/java"
+# os.environ["SPARK_HOME"] = "/usr/lib/spark"
+# os.environ["PYTHONPATH"] = "/opt/conda/bin/python3"
+
+# findspark.init()
+# findspark.find()
+
+
+# import pyspark.sql.functions as f
+# from pyspark.sql import SparkSession, Window
+# from pyspark.storagelevel import StorageLevel
+
 if TYPE_CHECKING:
-    from typing import List, Literal, Set
+    from typing import List, Literal, Set, Tuple
+
     from pyspark.sql import DataFrame
+
     from src.keeper import ArgsKeeper, SparkConfigKeeper
+
+
+class SparkRuntimeError(Exception):
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
 
 
 class SparkRunner(SparkHelper):
@@ -88,8 +96,12 @@ class SparkRunner(SparkHelper):
         `spark_conf` : `SparkConfigKeeper` object with Spark configuration properties
         `log4j_level` : Spark Context Java logging level, by default "WARN"
         """
-        # ? imort Spark etc here?
         self.logger.info("Initializing Spark Session")
+
+        findspark.init(spark_home=self.SPARK_HOME, python_path=self.PYTHONPATH)
+        findspark.find()
+
+        from pyspark.sql import SparkSession
 
         self.spark = (
             SparkSession.builder.master("yarn")
@@ -108,14 +120,12 @@ class SparkRunner(SparkHelper):
             .appName(app_name)
             .getOrCreate()
         )
-        s = "".join(
-            f"\t{i[0]}: {i[1]}\n" for i in spark_conf
-        )  # for print job config in logs
-        self.logger.info("Spark job properties:\n" + s)
+
+        self.logger.info(f"Spark job properties:\n{spark_conf}")
 
         self.spark.sparkContext.setLogLevel(log4j_level)
 
-        self.logger.info(f"Log4j level set to: {log4j_level}")
+        self.logger.info(f"Log4j level: {log4j_level}")
 
     def stop_session(self) -> None:
         """Stop active Spark Session"""
@@ -124,7 +134,7 @@ class SparkRunner(SparkHelper):
         self.logger.info("Session stopped")
 
     def _compute_distance(
-        self, dataframe: DataFrame, coord_cols_prefix: List[str]
+        self, dataframe: DataFrame, coord_cols_prefix: Tuple[str, str]
     ) -> DataFrame:
         """Compute distance between two point for each row of DataFrame
 
@@ -170,42 +180,42 @@ class SparkRunner(SparkHelper):
         |  11084|    649853|-36.862504936703104| 144.5634957576193|     18|   Ballarat|  -37.55|  143.85|    99.0|
         +-------+----------+-------------------+------------------+-------+-----------+--------+--------+--------+
         """
+        self.logger.debug("Computing distances")
+
+        from pyspark.sql.functions import asin, col, cos, radians
+        from pyspark.sql.functions import round as _round
+        from pyspark.sql.functions import sin, sqrt
 
         if len(coord_cols_prefix) > 2:
             raise IndexError(
-                "Only two values are allowed for `coord_cols_prefix` argument"
+                "Only two values are allowed for 'coord_cols_prefix' argument"
             )
 
-        self.logger.debug("Computing distances")
-
-        self.logger.debug("Collecting columns with coordinates")
-        cols = [(i + "_lat", i + "_lon") for i in coord_cols_prefix]
-        lat_1, lon_1 = cols[0]
-        lat_2, lon_2 = cols[1]
+        cols = ((i + "_lat", i + "_lon") for i in coord_cols_prefix)
+        lat_1, lon_1 = next(cols)
+        lat_2, lon_2 = next(cols)
 
         self.logger.debug("Checking if each columns exists in dataframe")
         if not all(col in dataframe.columns for col in (lat_1, lon_1, lat_2, lon_2)):
             raise KeyError(
-                "DataFrame should contains coordinates columns with names listed in `coord_cols_prefix` argument"
+                "DataFrame should contains coordinates columns with names listed in 'coord_cols_prefix' argument"
             )
         self.logger.debug("OK")
 
         self.logger.debug("Processing...")
         sdf = (
-            dataframe.withColumn(
-                "dlat", f.radians(f.col(lat_2)) - f.radians(f.col(lat_1))
-            )
-            .withColumn("dlon", f.radians(f.col(lon_2)) - f.radians(f.col(lon_1)))
+            dataframe.withColumn("dlat", radians(col(lat_2)) - radians(col(lat_1)))
+            .withColumn("dlon", radians(col(lon_2)) - radians(col(lon_1)))
             .withColumn(
                 "distance_a",
-                f.sin(f.col("dlat") / 2) ** 2
-                + f.cos(f.radians(f.col(lat_1)))
-                * f.cos(f.radians(f.col(lat_2)))
-                * f.sin(f.col("dlon") / 2) ** 2,
+                sin(col("dlat") / 2) ** 2
+                + cos(radians(col(lat_1)))
+                * cos(radians(col(lat_2)))
+                * sin(col("dlon") / 2) ** 2,
             )
-            .withColumn("distance_b", f.asin(f.sqrt(f.col("distance_a"))))
-            .withColumn("distance_c", 2 * 6371 * f.col("distance_b"))
-            .withColumn("distance", f.round(f.col("distance_c"), 0))
+            .withColumn("distance_b", asin(sqrt(col("distance_a"))))
+            .withColumn("distance_c", 2 * 6371 * col("distance_b"))
+            .withColumn("distance", _round(col("distance_c"), 0))
             .drop("dlat", "dlon", "distance_a", "distance_b", "distance_c")
         )
 
@@ -215,6 +225,7 @@ class SparkRunner(SparkHelper):
         self,
         dataframe: DataFrame,
         event_type: Literal["message", "reaction", "subscription", "registration"],
+        cities_coord_path: str,
     ) -> DataFrame:
         """Takes a DataFrame containing events and their coordinates, calculates the distance to each city, and keeps only the closest cities.
 
@@ -252,12 +263,15 @@ class SparkRunner(SparkHelper):
         |  91578|     11869| -41.04773532335144|147.26558385326746|2021-04-26 21:19:...|     20| Launceston|
         +-------+----------+-------------------+------------------+--------------------+-------+-----------+
         """
-        self.logger.debug(f"Collecting location of `{event_type}` event type")
+        self.logger.debug(f"Collecting location for '{event_type}' event type")
 
-        self.logger.debug(f"Getting cities coordinates dataframe from s3")
-        cities_coords_sdf = self.spark.read.parquet(
-            "s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates"
+        from pyspark.sql.functions import asc, col, row_number
+
+        self.logger.debug(
+            f"Getting cities coordinates dataframe from S3. Path: {cities_coord_path}"
         )
+        cities_coords_sdf = self.spark.read.parquet(cities_coord_path)
+        #  "s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates"
 
         partition_by = (
             ["user_id", "subscription_channel"]
@@ -272,17 +286,17 @@ class SparkRunner(SparkHelper):
         )
         sdf = self._compute_distance(
             dataframe=sdf,
-            coord_cols_prefix=["event", "city"],
+            coord_cols_prefix=("event", "city"),
         )
         self.logger.debug("Collecting resulting dataframe")
         sdf = (
             sdf.withColumn(
                 "city_dist_rnk",
-                f.row_number().over(
-                    Window().partitionBy(partition_by).orderBy(f.asc("distance"))  # type: ignore
+                row_number().over(
+                    Window().partitionBy(partition_by).orderBy(asc("distance"))  # type: ignore
                 ),
             )
-            .where(f.col("city_dist_rnk") == 1)
+            .where(col("city_dist_rnk") == 1)
             .drop(
                 "city_lat",
                 "city_lon",
@@ -330,7 +344,10 @@ class SparkRunner(SparkHelper):
         """
         self.logger.debug("Collecting users actual data dataframe")
 
-        self.logger.debug(f"Getting input data from: {keeper.src_path}")
+        from pyspark.sql import Window
+        from pyspark.sql.functions import col, desc, first, from_utc_timestamp, when
+
+        self.logger.debug(f"Getting input data from: '{keeper.src_path}'")
 
         src_paths = self._get_src_paths(event_type="message", keeper=keeper)
         events_sdf = (
@@ -353,14 +370,18 @@ class SparkRunner(SparkHelper):
             )
             .withColumn(
                 "msg_ts",
-                f.when(f.col("message_ts").isNotNull(), f.col("message_ts")).otherwise(
-                    f.col("datetime")
+                when(col("message_ts").isNotNull(), col("message_ts")).otherwise(
+                    col("datetime")
                 ),
             )
             .drop("message_ts", "datetime")
         )
 
-        sdf = self._get_event_location(dataframe=sdf, event_type="message")
+        sdf = self._get_event_location(
+            dataframe=sdf,
+            event_type="message",
+            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
+        )
 
         self.logger.debug("Getting cities coordinates dataframe from s3")
         cities_coords_sdf = self.spark.read.parquet(
@@ -370,32 +391,30 @@ class SparkRunner(SparkHelper):
         sdf = (
             sdf.withColumn(
                 "act_city",
-                f.first(col="city_name", ignorenulls=True).over(
-                    Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
+                first(col="city_name", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(desc("msg_ts"))
                 ),
             )
             .withColumn(
                 "act_city_id",
-                f.first(col="city_id", ignorenulls=True).over(
-                    Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
+                first(col="city_id", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(desc("msg_ts"))
                 ),
             )
             .withColumn(
                 "last_msg_ts",
-                f.first(col="msg_ts", ignorenulls=True).over(
-                    Window().partitionBy("user_id").orderBy(f.desc("msg_ts"))
+                first(col="msg_ts", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(desc("msg_ts"))
                 ),
             )
             .join(
                 cities_coords_sdf.select("city_id", "timezone"),
-                on=f.col("act_city_id") == cities_coords_sdf.city_id,
+                on=col("act_city_id") == cities_coords_sdf.city_id,
                 how="left",
             )
             .withColumn(
                 "local_time",
-                f.from_utc_timestamp(
-                    timestamp=f.col("last_msg_ts"), tz=f.col("timezone")
-                ),
+                from_utc_timestamp(timestamp=col("last_msg_ts"), tz=col("timezone")),
             )
             .select(
                 "user_id",
@@ -451,9 +470,25 @@ class SparkRunner(SparkHelper):
         |    617|  Newcastle| Couldn't determine |2021-04-26 ... |           1|         [Newcastle]|
         +-------+-----------+--------------------+---------------+------------+--------------------+
         """
-        self.logger.info("Starting collecting user info datamart")
+        self.logger.info("Starting collecting 'users-info-datamart'")
 
-        job_start = datetime.now()
+        from pyspark.sql import Window
+        from pyspark.sql.functions import (
+            arrays_zip,
+            asc,
+            col,
+            collect_list,
+            datediff,
+            desc,
+            explode,
+            lag,
+            lit,
+            row_number,
+            size,
+            when,
+        )
+
+        _job_start = datetime.now()
 
         sdf = self._get_users_actual_data_dataframe(keeper=keeper)
 
@@ -461,28 +496,28 @@ class SparkRunner(SparkHelper):
         travels_sdf = (
             sdf.withColumn(
                 "prev_city",
-                f.lag("city_name").over(
-                    Window().partitionBy("user_id").orderBy(f.asc("msg_ts"))
+                lag("city_name").over(
+                    Window().partitionBy("user_id").orderBy(asc("msg_ts"))
                 ),
             )
             .withColumn(
                 "visit_flg",
-                f.when(
-                    (f.col("city_name") != f.col("prev_city"))
-                    | (f.col("prev_city").isNull()),
-                    f.lit(1),
-                ).otherwise(f.lit(0)),
+                when(
+                    (col("city_name") != col("prev_city"))
+                    | (col("prev_city").isNull()),
+                    lit(1),
+                ).otherwise(lit(0)),
             )
-            .where(f.col("visit_flg") == 1)
+            .where(col("visit_flg") == 1)
             .groupby("user_id")
             .agg(
-                f.collect_list("city_name").alias("travel_array"),
-                f.collect_list("msg_ts").alias("travel_ts_array"),
+                collect_list("city_name").alias("travel_array"),
+                collect_list("msg_ts").alias("travel_ts_array"),
             )
             .select(
                 "user_id",
                 "travel_array",
-                f.size("travel_array").alias("travel_count"),
+                size("travel_array").alias("travel_count"),
                 "travel_ts_array",
             )
         )
@@ -490,33 +525,33 @@ class SparkRunner(SparkHelper):
         self.logger.debug("Collecting users home city. Processing...")
         home_city_sdf = (
             travels_sdf.withColumn(
-                "zipped_array", f.arrays_zip("travel_array", "travel_ts_array")
+                "zipped_array", arrays_zip("travel_array", "travel_ts_array")
             )
-            .withColumn("upzipped_array", f.explode("zipped_array"))
-            .withColumn("travel_city", f.col("upzipped_array").getItem("travel_array"))
-            .withColumn("travel_ts", f.col("upzipped_array").getItem("travel_ts_array"))
+            .withColumn("upzipped_array", explode("zipped_array"))
+            .withColumn("travel_city", col("upzipped_array").getItem("travel_array"))
+            .withColumn("travel_ts", col("upzipped_array").getItem("travel_ts_array"))
             .withColumn(
                 "prev_travel_ts",
-                f.lag("travel_ts").over(
-                    Window().partitionBy("user_id").orderBy(f.asc("travel_ts"))
+                lag("travel_ts").over(
+                    Window().partitionBy("user_id").orderBy(asc("travel_ts"))
                 ),
             )
             .withColumn(
                 "prev_travel_city",
-                f.lag("travel_city").over(
-                    Window().partitionBy("user_id").orderBy(f.asc("travel_ts"))
+                lag("travel_city").over(
+                    Window().partitionBy("user_id").orderBy(asc("travel_ts"))
                 ),
             )
-            .withColumn("diff", f.datediff("travel_ts", "prev_travel_ts"))
-            .where(f.col("diff") > 27)
+            .withColumn("diff", datediff("travel_ts", "prev_travel_ts"))
+            .where(col("diff") > 27)
             .withColumn(
                 "rnk",
-                f.row_number().over(
-                    Window().partitionBy("user_id").orderBy(f.desc("travel_ts"))
+                row_number().over(
+                    Window().partitionBy("user_id").orderBy(desc("travel_ts"))
                 ),
             )
-            .where(f.col("rnk") == 1)
-            .select("user_id", f.col("prev_travel_city").alias("home_city"))
+            .where(col("rnk") == 1)
+            .select("user_id", col("prev_travel_city").alias("home_city"))
         )
 
         self.logger.debug("Collecting datamart")
@@ -561,8 +596,8 @@ class SparkRunner(SparkHelper):
             )
             self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
 
-        job_end = datetime.now()
-        self.logger.info(f"Job execution time: {job_end - job_start}")
+        _job_end = datetime.now()
+        self.logger.info(f"Job execution time: {_job_end - _job_start}")
 
     def collect_location_zone_agg_datamart(self, keeper: ArgsKeeper) -> None:
         """Collect location zone aggregation datamart and save results on s3

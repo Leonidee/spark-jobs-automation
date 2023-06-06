@@ -4,24 +4,25 @@ import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import boto3
 from botocore.exceptions import ClientError
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
-    from typing import List, Literal, Set
+    from typing import List, Literal, Set, Tuple
+
     from pyspark.sql import DataFrame
+
     from src.keeper import ArgsKeeper, SparkConfigKeeper
 
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
-from src.logger import SparkLogger
 from src.environ import EnvironManager
 from src.helper.exceptions import S3ServiceError
+from src.logger import SparkLogger
 
 
 class SparkHelper:
@@ -39,16 +40,28 @@ class SparkHelper:
             "AWS_ENDPOINT_URL",
             "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY",
+            "HADOOP_CONF_DIR",
+            "YARN_CONF_DIR",
+            "JAVA_HOME",
+            "SPARK_HOME",
+            "PYTHONPATH",
         )
 
-        environ.check_environ(var=_REQUIRED_VARS)  # type: ignore
+        environ.check_environ(var=_REQUIRED_VARS)
 
-        self.AWS_ENDPOINT_URL, self.AWS_ACCESS_KEY_ID, self.AWS_SECRET_ACCESS_KEY = map(
-            os.getenv, _REQUIRED_VARS
-        )
+        (
+            self.AWS_ENDPOINT_URL,
+            self.AWS_ACCESS_KEY_ID,
+            self.AWS_SECRET_ACCESS_KEY,
+            self.HADOOP_CONF_DIR,
+            self.YARN_CONF_DIR,
+            self.JAVA_HOME,
+            self.SPARK_HOME,
+            self.PYTHONPATH,
+        ) = map(os.getenv, _REQUIRED_VARS)
 
     def _get_s3_instance(self):
-        "Gets ready-to-use boto3 connection instance for s3 service communication"
+        "Gets ready-to-use boto3 connection instance for communication with s3 service"
 
         self.logger.debug("Getting boto3 instance")
 
@@ -66,7 +79,7 @@ class SparkHelper:
         self,
         event_type: Literal["message", "reaction", "subscription"],
         keeper: ArgsKeeper,
-    ) -> Set[str]:
+    ) -> Tuple[str]:
         """Get S3 paths contains dataset partitions.
 
         Collects paths corresponding to the passed in `keeper` object arguments and checks if each path exists on S3. Collects only existing paths.
@@ -106,9 +119,9 @@ class SparkHelper:
 
         self.logger.debug("Checking if each path exists on S3")
 
-        existing_paths = []
+        existing_paths = set()
         for path in paths:
-            self.logger.debug(f"Checking {path}")
+            self.logger.debug(f"Checking '{path}'")
             try:
                 response = s3.list_objects(
                     Bucket=path.split(sep="/")[2],
@@ -117,7 +130,7 @@ class SparkHelper:
                 )
 
                 if "Contents" in response.keys():
-                    existing_paths.append(path)
+                    existing_paths.add(path)
                     self.logger.debug("OK")
                 else:
                     self.logger.debug(f"No data for '{path}' path. Skipping")
@@ -126,10 +139,9 @@ class SparkHelper:
             except ClientError as e:
                 raise S3ServiceError(str(e))
 
-        # if returns empty list - exit
-        if existing_paths == [] or existing_paths is None:
+        if not existing_paths:
             raise S3ServiceError("No data on S3 for given arguments")
 
         self.logger.debug(f"Done. {len(existing_paths)} paths collected")
 
-        return set(existing_paths)
+        return tuple(existing_paths)

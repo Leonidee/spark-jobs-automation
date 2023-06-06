@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
-import os
-
-from typing import overload, Tuple
+from typing import Tuple, overload
 
 from dotenv import find_dotenv, load_dotenv
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.logger import SparkLogger
 from src.config import Config
-from src.environ.exceptions import EnvironNotSet, DotEnvError
+from src.environ.exceptions import DotEnvError, EnvironNotSet
+from src.logger import SparkLogger
 
 
 class EnvironManager:
@@ -92,7 +91,7 @@ class EnvironManager:
         ...
 
     @overload
-    def check_environ(self, var: Tuple[str]) -> bool:
+    def check_environ(self, var: Tuple[str, ...]) -> bool:
         ...
 
     def check_environ(self, var) -> bool:

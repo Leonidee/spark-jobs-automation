@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime
+
 from pydantic import BaseModel, validator
-from datetime import datetime, date
 
 
 class ArgsKeeper(BaseModel):
@@ -128,6 +129,9 @@ class SparkConfigKeeper(BaseModel):
     executor_memory: str
     executor_cores: int
     max_executors_num: int
+
+    def __str__(self) -> str:
+        return f"\tspark.executor.memory: {self.executor_memory}\n\tspark.executor.cores: {self.executor_cores}\n\tspark.dynamicAllocation.maxExecutors: {self.max_executors_num}"
 
     @validator("executor_memory")
     def validate_executor_memory(cls, v) -> str:
