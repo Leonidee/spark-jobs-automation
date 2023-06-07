@@ -1,8 +1,13 @@
 from __future__ import annotations
 
-from logging import Logger, getLogger, StreamHandler
-from coloredlogs import ColoredFormatter, install
 import sys
+from logging import Logger, StreamHandler, getLogger
+from pathlib import Path
+
+from coloredlogs import ColoredFormatter, install
+
+sys.path.append(str(Path(__file__).parent.parent))
+from src.config import Config
 
 
 class SparkLogger(Logger):
@@ -20,8 +25,13 @@ class SparkLogger(Logger):
     [2023-05-24 17:32:16] {src.utils.environ:4} INFO: This is a test!
     """
 
-    def __init__(self, level: str = "INFO"):
-        self.level = level  # type: ignore
+    def __init__(self, level: str | None = None):
+        config = Config("config.yaml")
+
+        if not level:
+            self._level = config.python_log_level  # type: ignore
+        else:
+            self._level = level
 
     def get_logger(self, logger_name: str) -> Logger:
         """Returns configured ready-for-use logger instance
@@ -34,8 +44,8 @@ class SparkLogger(Logger):
         """
         logger = getLogger(name=logger_name)
 
-        install(logger=logger, level=self.level)
-        logger.setLevel(level=self.level)
+        install(logger=logger, level=self._level)
+        logger.setLevel(level=self._level)
 
         if logger.hasHandlers():
             logger.handlers.clear()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
-from typing import Union, Literal
+from typing import Literal, Union
 
 from pydantic import BaseModel, validator
 

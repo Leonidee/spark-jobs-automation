@@ -16,8 +16,6 @@ from typing import TYPE_CHECKING
 from src.helper import SparkHelper
 from src.logger import SparkLogger
 
-# from pyspark.storagelevel import StorageLevel
-
 if TYPE_CHECKING:
     from typing import List, Literal, Set, Tuple
 
@@ -63,9 +61,7 @@ class SparkRunner(SparkHelper):
     def __init__(self) -> None:
         super().__init__()
 
-        self.logger = SparkLogger(level=self.config.python_log_level).get_logger(
-            logger_name=__name__
-        )
+        self.logger = SparkLogger().get_logger(logger_name=__name__)
 
     def init_session(
         self,

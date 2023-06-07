@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import yaml
-import re
 import os
-from pathlib import Path
+import re
 import sys
-
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+import yaml
 
 if TYPE_CHECKING:
     from os import PathLike
