@@ -22,16 +22,18 @@ def main() -> None:
         DEPTH = int(sys.argv[2])
         SRC_PATH = str(sys.argv[3])
         TGT_PATH = str(sys.argv[4])
-        PROCESSED_DTTM = str(sys.argv[5])
+        COORDS_PATH = str(sys.argv[5])
+        PROCESSED_DTTM = str(sys.argv[6])
 
-        if len(sys.argv) > 6:
-            raise KeyError("Too many arguments for job submitting! Expected 5")
+        if len(sys.argv) > 7:
+            raise KeyError("Too many arguments for job submitting! Expected 6")
 
         keeper = ArgsKeeper(
             date=DATE,
             depth=DEPTH,
             src_path=SRC_PATH,
             tgt_path=TGT_PATH,
+            coords_path=COORDS_PATH,
             processed_dttm=PROCESSED_DTTM,
         )
         conf = SparkConfigKeeper(

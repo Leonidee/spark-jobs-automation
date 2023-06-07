@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
-from typing import Union
+from typing import Union, Literal
 
 from pydantic import BaseModel, validator
 
@@ -52,6 +52,7 @@ class ArgsKeeper(BaseModel):
     depth: int
     src_path: str
     tgt_path: str
+    coords_path: Union[str, None] = None
     processed_dttm: Union[str, None] = None
 
     def __str__(self) -> str:
@@ -95,6 +96,14 @@ class ArgsKeeper(BaseModel):
 
     @validator("tgt_path")
     def validate_tgt_path(cls, v) -> str:
+        if not isinstance(v, str):
+            raise ValueError("must string")
+        if "s3" not in v:
+            raise ValueError("only S3 service paths allowed")
+        return v
+
+    @validator("coords_path")
+    def validate_coords_path(cls, v) -> str:
         if not isinstance(v, str):
             raise ValueError("must string")
         if "s3" not in v:

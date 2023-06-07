@@ -73,6 +73,10 @@ class SparkHelper:
 
         return s3
 
+    def _check_paths(self) -> ...:
+        ...
+        # todo нужна валидация
+
     def _get_src_paths(
         self,
         event_type: Literal["message", "reaction", "subscription"],

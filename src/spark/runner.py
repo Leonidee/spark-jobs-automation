@@ -92,18 +92,33 @@ class SparkRunner(SparkHelper):
 
         self.spark = (
             SparkSession.builder.master("yarn")
-            .config("spark.hadoop.fs.s3a.access.key", self.AWS_ACCESS_KEY_ID)
-            .config("spark.hadoop.fs.s3a.secret.key", self.AWS_SECRET_ACCESS_KEY)
-            .config("spark.hadoop.fs.s3a.endpoint", self.AWS_ENDPOINT_URL)
             .config(
-                "spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem"
+                map={
+                    # S3 Service configuration:
+                    "spark.hadoop.fs.s3a.access.key": self.AWS_ACCESS_KEY_ID,
+                    "spark.hadoop.fs.s3a.secret.key": self.AWS_SECRET_ACCESS_KEY,
+                    "spark.hadoop.fs.s3a.endpoint": self.AWS_ENDPOINT_URL,
+                    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
+                    # Spark configurations:
+                    "spark.executor.memory": spark_conf.executor_memory,
+                    "spark.executor.cores": str(spark_conf.executor_cores),
+                    "spark.dynamicAllocation.maxExecutors": str(
+                        spark_conf.max_executors_num
+                    ),
+                }
             )
-            .config("spark.executor.memory", spark_conf.executor_memory)
-            .config("spark.executor.cores", str(spark_conf.executor_cores))
-            .config(
-                "spark.dynamicAllocation.maxExecutors",
-                str(spark_conf.max_executors_num),
-            )
+            # .config("spark.hadoop.fs.s3a.access.key", self.AWS_ACCESS_KEY_ID)
+            # .config("spark.hadoop.fs.s3a.secret.key", self.AWS_SECRET_ACCESS_KEY)
+            # .config("spark.hadoop.fs.s3a.endpoint", self.AWS_ENDPOINT_URL)
+            # .config(
+            #     "spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem"
+            # )
+            # .config("spark.executor.memory", spark_conf.executor_memory)
+            # .config("spark.executor.cores", str(spark_conf.executor_cores))
+            # .config(
+            #     "spark.dynamicAllocation.maxExecutors",
+            #     str(spark_conf.max_executors_num),
+            # )
             .appName(app_name)
             .getOrCreate()
         )
@@ -255,9 +270,7 @@ class SparkRunner(SparkHelper):
         from pyspark.sql.functions import asc, col, row_number  # type: ignore
         from pyspark.sql import Window  # type: ignore
 
-        self.logger.debug(
-            f"Getting cities coordinates dataframe from S3. Path: {cities_coord_path}"
-        )
+        self.logger.debug(f"Getting cities coordinates dataframe from S3")
         cities_coords_sdf = self.spark.read.parquet(cities_coord_path)
 
         partition_by = (
@@ -331,6 +344,12 @@ class SparkRunner(SparkHelper):
         """
         self.logger.debug("Collecting users actual data dataframe")
 
+        if not keeper.coords_path:
+            raise KeyError(
+                "We need 'coords_path' for this job!"
+                "Please specify one in given 'ArgsKeeper' instance"
+            )
+
         from pyspark.sql import Window  # type: ignore
         from pyspark.sql.functions import col, desc, first, from_utc_timestamp, when  # type: ignore
 
@@ -367,13 +386,11 @@ class SparkRunner(SparkHelper):
         sdf = self._get_event_location(
             dataframe=sdf,
             event_type="message",
-            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
+            cities_coord_path=keeper.coords_path,
         )
 
         self.logger.debug("Getting cities coordinates dataframe from s3")
-        cities_coords_sdf = self.spark.read.parquet(
-            "s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates"
-        )
+        cities_coords_sdf = self.spark.read.parquet(keeper.coords_path)
 
         sdf = (
             sdf.withColumn(
@@ -423,14 +440,10 @@ class SparkRunner(SparkHelper):
         `keeper` : Arguments keeper object
 
         ## Examples
-        Lets initialize class object and start session:
-        >>> spark = SparkRunner()
-        >>> spark.init_session(app_name="testing-app", spark_conf=conf, log4j_level="INFO")
-
-        Now we can execute class method that collects datamart:
+        Excecute datamart collector job:
         >>> spark.collect_users_info_datamart(keeper=keeper)
 
-        And after that read saved results to see how it looks:
+        Now we can read saved results to see how it looks:
         >>> sdf = spark.read.parquet(keeper.tgt_path)
         >>> sdf.printSchema()
         root
@@ -474,6 +487,7 @@ class SparkRunner(SparkHelper):
             size,
             when,
         )
+        from pyspark.sql.utils import AnalysisException  # type: ignore
 
         _job_start = datetime.now()
 
@@ -509,7 +523,7 @@ class SparkRunner(SparkHelper):
             )
         )
 
-        self.logger.debug("Collecting users home city. Processing...")
+        self.logger.debug("Collecting users home city dataframe. Processing...")
         home_city_sdf = (
             travels_sdf.withColumn(
                 "zipped_array", arrays_zip("travel_array", "travel_ts_array")
@@ -565,17 +579,18 @@ class SparkRunner(SparkHelper):
         processed_dt = datetime.strptime(
             keeper.processed_dttm.replace("T", " "), r"%Y-%m-%d %H:%M:%S"  # type: ignore
         ).date()
+
         OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
+
         try:
             sdf.repartition(1).write.parquet(
                 path=OUTPUT_PATH,
                 mode="errorifexists",
             )
             self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
-        except Exception:
-            self.logger.warning(
-                "Notice that target path is already exists and will be overwritten!"
-            )
+
+        except AnalysisException as e:
+            self.logger.warning(f"Notice that {str(e)}")
             self.logger.info("Overwriting...")
             sdf.repartition(1).write.parquet(
                 path=OUTPUT_PATH,
@@ -869,6 +884,8 @@ class SparkRunner(SparkHelper):
         registrations_sdf.unpersist()
         subscriptions_sdf.unpersist()
         del (messages_sdf, reaction_sdf, registrations_sdf, subscriptions_sdf)
+
+        sdf.show(100, False)  # TODO remove this
 
         self.logger.info("Datamart collected!")
 
