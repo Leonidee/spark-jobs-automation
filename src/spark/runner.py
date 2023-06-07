@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 from src.helper import SparkHelper
 from src.logger import SparkLogger
 
-
 # from pyspark.storagelevel import StorageLevel
 
 if TYPE_CHECKING:
@@ -127,7 +126,7 @@ class SparkRunner(SparkHelper):
 
         self.spark.sparkContext.setLogLevel(log4j_level)
 
-        self.logger.info(f"Log4j level: {log4j_level}")
+        self.logger.info(f"Log4j level: '{log4j_level}'")
 
     def stop_session(self) -> None:
         """Stop active Spark Session"""
@@ -267,10 +266,12 @@ class SparkRunner(SparkHelper):
         """
         self.logger.debug(f"Collecting location for '{event_type}' event type")
 
-        from pyspark.sql.functions import asc, col, row_number  # type: ignore
         from pyspark.sql import Window  # type: ignore
+        from pyspark.sql.functions import asc, col, row_number  # type: ignore
 
-        self.logger.debug(f"Getting cities coordinates dataframe from S3")
+        self.logger.debug(
+            f"Getting cities coordinates dataframe from S3. Path: {cities_coord_path}"
+        )
         cities_coords_sdf = self.spark.read.parquet(cities_coord_path)
 
         partition_by = (
@@ -307,7 +308,9 @@ class SparkRunner(SparkHelper):
 
         return sdf
 
-    def _get_users_actual_data_dataframe(self, keeper: ArgsKeeper) -> DataFrame:
+    def _get_users_actual_data_dataframe(
+        self, keeper: ArgsKeeper, cities_coord_path: str
+    ) -> DataFrame:
         """Returns dataframe with user information based on sent messages
 
         ## Parameters
@@ -342,7 +345,7 @@ class SparkRunner(SparkHelper):
         |    418|   1115254|2022-04-25 ... |      Perth|      Perth|          4|2022-04-26 ... |
         +-------+----------+---------------+-----------+-----------+-----------+---------------+
         """
-        self.logger.debug("Collecting users actual data dataframe")
+        self.logger.debug("Collecting dataframe of users actual data")
 
         if not keeper.coords_path:
             raise KeyError(
@@ -351,7 +354,15 @@ class SparkRunner(SparkHelper):
             )
 
         from pyspark.sql import Window  # type: ignore
-        from pyspark.sql.functions import col, desc, first, from_utc_timestamp, when  # type: ignore
+        from pyspark.sql.functions import (  # type: ignore
+            col,
+            desc,
+            first,
+            from_utc_timestamp,
+            when,
+        )
+
+        _CITIES_COORD_PATH = cities_coord_path
 
         self.logger.debug(f"Getting input data from: '{keeper.src_path}'")
 
@@ -386,11 +397,13 @@ class SparkRunner(SparkHelper):
         sdf = self._get_event_location(
             dataframe=sdf,
             event_type="message",
-            cities_coord_path=keeper.coords_path,
+            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
         )
 
         self.logger.debug("Getting cities coordinates dataframe from s3")
-        cities_coords_sdf = self.spark.read.parquet(keeper.coords_path)
+        cities_coords_sdf = self.spark.read.parquet(
+            "s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates"
+        )
 
         sdf = (
             sdf.withColumn(
@@ -440,7 +453,11 @@ class SparkRunner(SparkHelper):
         `keeper` : Arguments keeper object
 
         ## Examples
-        Excecute datamart collector job:
+        Lets initialize class object and start session:
+        >>> spark = SparkRunner()
+        >>> spark.init_session(app_name="testing-app", spark_conf=conf, log4j_level="INFO")
+
+        Now we can execute class method that collects datamart:
         >>> spark.collect_users_info_datamart(keeper=keeper)
 
         Now we can read saved results to see how it looks:
@@ -491,7 +508,10 @@ class SparkRunner(SparkHelper):
 
         _job_start = datetime.now()
 
-        sdf = self._get_users_actual_data_dataframe(keeper=keeper)
+        sdf = self._get_users_actual_data_dataframe(
+            keeper=keeper,
+            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
+        )
 
         self.logger.debug("Collecting dataframe with travels data. Processing...")
         travels_sdf = (
@@ -649,16 +669,10 @@ class SparkRunner(SparkHelper):
         self.logger.info("Staring collecting 'location_zone_agg_datamart'")
 
         from pyspark.sql import Window  # type: ignore
+        from pyspark.sql.functions import asc, col
+        from pyspark.sql.functions import count as _count  # type: ignore
+        from pyspark.sql.functions import first, lit, trunc, when
         from pyspark.storagelevel import StorageLevel  # type: ignore
-        from pyspark.sql.functions import (  # type: ignore
-            asc,
-            col,
-            lit,
-            when,
-            trunc,
-            count as _count,
-            first,
-        )
 
         job_start = datetime.now()
 
@@ -892,7 +906,7 @@ class SparkRunner(SparkHelper):
         self.logger.info("Writing results")
 
         processed_dt = datetime.strptime(
-            keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S"  # type: ignore
+            keeper.processed_dttm.replace("T", " "), r"%Y-%m-%d %H:%M:%S"  # type: ignore
         ).date()
         OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
         try:
@@ -943,16 +957,16 @@ class SparkRunner(SparkHelper):
         job_start = datetime.now()
 
         from pyspark.sql import Window  # type: ignore
-        from pyspark.storagelevel import StorageLevel  # type: ignore
         from pyspark.sql.functions import (  # type: ignore
-            explode,
             array,
-            col,
-            when,
-            lit,
-            first,
             asc,
+            col,
+            explode,
+            first,
+            lit,
+            when,
         )
+        from pyspark.storagelevel import StorageLevel  # type: ignore
 
         messages_src_paths = self._get_src_paths(keeper=keeper, event_type="message")
         real_contacts_sdf = (
