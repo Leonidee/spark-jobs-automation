@@ -107,15 +107,12 @@ class SparkRunner(SparkHelper):
 
         ## Parameters
         `dataframe` : `pyspark.sql.DataFrame`
-        `coord_cols_prefix` : Prefix of columns names with coordinates.
+        `coord_cols_prefix` : Tuple with prefix of columns names with coordinates. Must be exactly two.
 
-        For example `['city', 'event']`. This means that DataFrame contains columns city_lat, city_lon, event_lat and event_lon with the corresponding coordinates
+        For example `('city', 'event')`. This means that DataFrame contains columns city_lat, city_lon, event_lat and event_lon with the corresponding coordinates
 
         ## Returns
         `pyspark.sql.DataFrame` : DataFrame with additional column `distance` which contains distance between two columns
-
-        ## Raises
-        `AnalysisException` : Raises if DataFrame does not contains columns with coordinates or if `coord_cols_prefix` contains more than two values
 
         ## Examples
         >>> sdf.show()
@@ -132,7 +129,7 @@ class SparkRunner(SparkHelper):
         +-------+----------+-------------------+------------------+-------+-----------+--------+--------+
         >>> new_sdf = self._compute_distance(
         ...            dataframe=sdf,
-        ...            coord_cols_prefix=["event", "city"],
+        ...            coord_cols_prefix=("event", "city"),
         ...        )
         >>> new_sdf.show()
         +-------+----------+-------------------+------------------+-------+-----------+--------+--------+--------+
@@ -275,10 +272,10 @@ class SparkRunner(SparkHelper):
         return sdf
 
     def _get_users_actual_data_dataframe(self, keeper: ArgsKeeper) -> DataFrame:
-        """Returns dataframe with user information based on sent messages
+        """Returns dataframe with user information based on sent messages.
 
         ## Parameters
-        `keeper` : Arguments keeper object
+        `keeper` : `ArgsKeeper` with job arguments.
 
         ## Returns
         `DataFrame` : `pyspark.sql.DataFrame`
@@ -410,17 +407,14 @@ class SparkRunner(SparkHelper):
         """Collect users info datamart and save results on s3
 
         ## Parameters
-        `keeper` : Arguments keeper object
+        `keeper` : `ArgsKeeper` with job arguments.
 
         ## Examples
-        Lets initialize class object and start session:
         >>> spark = SparkRunner()
         >>> spark.init_session(app_name="testing-app", spark_conf=conf, log4j_level="INFO")
-
-        Now we can execute class method that collects datamart:
         >>> spark.collect_users_info_datamart(keeper=keeper)
 
-        Now we can read saved results to see how it looks:
+        Read saved results to see how it looks:
         >>> sdf = spark.read.parquet(keeper.tgt_path)
         >>> sdf.printSchema()
         root
@@ -585,14 +579,11 @@ class SparkRunner(SparkHelper):
         `keeper` : Arguments keeper object
 
         ## Examples
-        Lets initialize class object and start session:
         >>> spark = SparkRunner()
         >>> spark.init_session(app_name="testing-app", spark_conf=conf, log4j_level="INFO")
-
-        Now we can execute class method that collects datamart:
         >>> spark.collect_location_zone_agg_datamart(keeper=keeper) # saved results on s3
 
-        And after that read saved results to see how it looks:
+        Read saved results to see how it looks:
         >>> sdf = spark.read.parquet(keeper.tgt_path)
         >>> sdf.printSchema()
         root
@@ -616,7 +607,6 @@ class SparkRunner(SparkHelper):
         |1      |2022-02-28|2022-03-01|134         |147          |6453             |130      |659          |1098          |45580             |630       |
         |1      |2022-03-07|2022-03-01|145         |224          |8833             |143      |659          |1098          |45580             |630       |
                                                                              ...
-        |3      |2022-02-28|2022-03-01|238         |142          |13786            |233      |1190         |1068          |99175             |1121      |
         |3      |2022-03-07|2022-03-01|264         |192          |19320            |253      |1190         |1068          |99175             |1121      |
         |3      |2022-03-14|2022-03-01|270         |253          |22658            |254      |1190         |1068          |99175             |1121      |
         |3      |2022-03-21|2022-03-01|258         |300          |26533            |233      |1190         |1068          |99175             |1121      |
@@ -626,12 +616,20 @@ class SparkRunner(SparkHelper):
         self.logger.info("Staring collecting 'location_zone_agg_datamart'")
 
         from pyspark.sql import Window  # type: ignore
-        from pyspark.sql.functions import asc, col
-        from pyspark.sql.functions import count as _count  # type: ignore
-        from pyspark.sql.functions import first, lit, trunc, when
+        from pyspark.sql.functions import asc, col  # type: ignore
+        from pyspark.sql.functions import count as _count, sum as _sum  # type: ignore
+        from pyspark.sql.functions import first, lit, trunc, when  # type: ignore
         from pyspark.storagelevel import StorageLevel  # type: ignore
+        from pyspark.sql.utils import AnalysisException  # type: ignore
+        from pyspark.sql.types import (  # type: ignore
+            StructType,
+            StructField,
+            IntegerType,
+            DateType,
+            LongType,
+        )
 
-        job_start = datetime.now()
+        _job_start = datetime.now()
 
         self.logger.debug("Collecing messages dataframe. Processing...")
 
@@ -661,10 +659,11 @@ class SparkRunner(SparkHelper):
             .drop_duplicates(subset=["user_id", "message_id", "msg_ts"])
             .drop("datetime", "message_ts")
         )
+
         messages_sdf = self._get_event_location(
             dataframe=messages_sdf,
             event_type="message",
-            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
+            cities_coord_path=keeper.coords_path,  # type: ignore
         )
 
         messages_sdf = (
@@ -675,7 +674,7 @@ class SparkRunner(SparkHelper):
             .agg(_count("message_id").alias("week_message"))
             .withColumn(
                 "month_message",
-                sum(col("week_message")).over(
+                _sum(col("week_message")).over(
                     Window().partitionBy(col("zone_id"), col("month"))
                 ),
             )
@@ -706,7 +705,7 @@ class SparkRunner(SparkHelper):
         reaction_sdf = self._get_event_location(
             dataframe=reaction_sdf,
             event_type="reaction",
-            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
+            cities_coord_path=keeper.coords_path,  # type: ignore
         )
         reaction_sdf = (
             reaction_sdf.withColumnRenamed("city_id", "zone_id")
@@ -717,7 +716,7 @@ class SparkRunner(SparkHelper):
             .agg(_count("message_id").alias("week_reaction"))
             .withColumn(
                 "month_reaction",
-                sum(col("week_reaction")).over(
+                _sum(col("week_reaction")).over(
                     Window().partitionBy(col("zone_id"), col("month"))
                 ),
             )
@@ -767,7 +766,7 @@ class SparkRunner(SparkHelper):
         registrations_sdf = self._get_event_location(
             dataframe=registrations_sdf,
             event_type="registration",
-            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
+            cities_coord_path=keeper.coords_path,  # type: ignore
         )
 
         registrations_sdf = (
@@ -779,7 +778,7 @@ class SparkRunner(SparkHelper):
             .agg(_count("user_id").alias("week_user"))
             .withColumn(
                 "month_user",
-                sum(col("week_user")).over(
+                _sum(col("week_user")).over(
                     Window().partitionBy(col("zone_id"), col("month"))
                 ),
             )
@@ -810,7 +809,7 @@ class SparkRunner(SparkHelper):
         subscriptions_sdf = self._get_event_location(
             dataframe=subscriptions_sdf,
             event_type="subscription",
-            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
+            cities_coord_path=keeper.coords_path,  # type: ignore
         )
         subscriptions_sdf = (
             subscriptions_sdf.withColumnRenamed("city_id", "zone_id")
@@ -821,7 +820,7 @@ class SparkRunner(SparkHelper):
             .agg(_count("user_id").alias("week_subscription"))
             .withColumn(
                 "month_subscription",
-                sum(col("week_subscription")).over(
+                _sum(col("week_subscription")).over(
                     Window().partitionBy(col("zone_id"), col("month"))
                 ),
             )
@@ -830,12 +829,12 @@ class SparkRunner(SparkHelper):
 
         self.logger.debug("Joining dataframes")
 
-        cols = ["zone_id", "week", "month"]
+        _COLS = ["zone_id", "week", "month"]
         sdf = (
-            messages_sdf.join(other=reaction_sdf, on=cols)
-            .join(other=registrations_sdf, on=cols)
-            .join(other=subscriptions_sdf, on=cols)
-            .orderBy(cols)  # type: ignore
+            messages_sdf.join(other=reaction_sdf, on=_COLS)
+            .join(other=registrations_sdf, on=_COLS)
+            .join(other=subscriptions_sdf, on=_COLS)
+            .orderBy(_COLS)  # type: ignore
             .select(
                 "zone_id",
                 "week",
@@ -850,11 +849,30 @@ class SparkRunner(SparkHelper):
                 "month_user",
             )
         )
-        messages_sdf.unpersist()
-        reaction_sdf.unpersist()
-        registrations_sdf.unpersist()
-        subscriptions_sdf.unpersist()
-        del (messages_sdf, reaction_sdf, registrations_sdf, subscriptions_sdf)
+
+        _SCHEMA = StructType(  # todo это не рабоатет, что-то не так с определение схемы, в остальном все ок
+            [
+                StructField("zone_id", IntegerType(), nullable=False),
+                StructField("week", DateType(), nullable=False),
+                StructField("month", DateType(), nullable=False),
+                StructField("week_message", LongType(), nullable=False),
+                StructField("week_reaction", LongType(), nullable=False),
+                StructField("week_subscription", LongType(), nullable=False),
+                StructField("week_user", LongType(), nullable=False),
+                StructField("month_message", LongType(), nullable=False),
+                StructField("month_reaction", LongType(), nullable=False),
+                StructField("month_subscription", LongType(), nullable=False),
+                StructField("month_user", LongType(), nullable=False),
+            ]
+        )
+
+        sdf = self.spark.createDataFrame(sdf, schema=_SCHEMA)
+
+        for frame in (messages_sdf, reaction_sdf, registrations_sdf, subscriptions_sdf):
+            frame.unpersist()
+
+        # Job execution time: 0:01:58.190469
+        # Job execution time: 0:01:31.303124
 
         sdf.show(100, False)  # TODO remove this
 
@@ -865,17 +883,18 @@ class SparkRunner(SparkHelper):
         processed_dt = datetime.strptime(
             keeper.processed_dttm.replace("T", " "), r"%Y-%m-%d %H:%M:%S"  # type: ignore
         ).date()
+
         OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
+
         try:
             sdf.repartition(1).write.parquet(
                 path=OUTPUT_PATH,
                 mode="errorifexists",
             )
             self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
-        except Exception:
-            self.logger.warning(
-                "Notice that target path is already exists and will be overwritten!"
-            )
+
+        except AnalysisException as err:
+            self.logger.warning(f"Notice that {str(err)}")
             self.logger.info("Overwriting...")
             sdf.repartition(1).write.parquet(
                 path=OUTPUT_PATH,
@@ -883,8 +902,8 @@ class SparkRunner(SparkHelper):
             )
             self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
 
-        job_end = datetime.now()
-        self.logger.info(f"Job execution time: {job_end - job_start}")
+        _job_end = datetime.now()
+        self.logger.info(f"Job execution time: {_job_end - _job_start}")
 
     def collect_friend_recommendation_datamart(self, keeper: ArgsKeeper) -> None:
         """Collect friend recommendation datamart and save results on s3

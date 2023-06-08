@@ -1,19 +1,21 @@
 import sys
 from pathlib import Path
 
-from pyspark.sql.utils import AnalysisException, CapturedException  # type: ignore
+from pyspark.sql.utils import CapturedException  # type: ignore
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.config import Config
+from src.config import Config, EnableToGetConfig
+from src.environ import DotEnvError, EnvironNotSet
+from src.helper import S3ServiceError
+from src.keeper import ArgsKeeper, SparkConfigKeeper
 from src.logger import SparkLogger
 from src.spark import SparkRunner
-from src.keeper import ArgsKeeper, SparkConfigKeeper
 
 
 config = Config("config.yaml")
 
-logger = SparkLogger(level=config.python_log_level).get_logger(logger_name=__name__)
+logger = SparkLogger().get_logger(logger_name=__name__)
 
 
 def main() -> None:
@@ -22,16 +24,18 @@ def main() -> None:
         DEPTH = int(sys.argv[2])
         SRC_PATH = str(sys.argv[3])
         TGT_PATH = str(sys.argv[4])
-        PROCESSED_DTTM = str(sys.argv[5])
+        COORDS_PATH = str(sys.argv[5])
+        PROCESSED_DTTM = str(sys.argv[6])
 
-        if len(sys.argv) > 6:
-            raise KeyError("Too many arguments for job submitting! Expected 5")
+        if len(sys.argv) > 7:
+            raise KeyError("Too many arguments for job submitting! Expected 6")
 
         keeper = ArgsKeeper(
             date=DATE,
             depth=DEPTH,
             src_path=SRC_PATH,
             tgt_path=TGT_PATH,
+            coords_path=COORDS_PATH,
             processed_dttm=PROCESSED_DTTM,
         )
         conf = SparkConfigKeeper(
@@ -39,10 +43,23 @@ def main() -> None:
         )
 
     except (IndexError, KeyError) as e:
-        logger.exception(e)
+        logger.error(e)
         sys.exit(1)
+
     try:
         spark = SparkRunner()
+    except (DotEnvError, EnvironNotSet, EnableToGetConfig) as err:
+        logger.error(err)
+        sys.exit(1)
+
+    try:
+        for bucket in (keeper.src_path, keeper.tgt_path, keeper.coords_path):
+            spark.check_s3_object_existence(key=bucket.split(sep="/")[2], type="bucket")  # type: ignore
+    except S3ServiceError as err:
+        logger.error(err)
+        sys.exit(1)
+
+    try:
         spark.init_session(
             app_name=config.get_spark_application_name,
             spark_conf=conf,
@@ -50,8 +67,8 @@ def main() -> None:
         )
         spark.collect_location_zone_agg_datamart(keeper=keeper)
 
-    except (CapturedException, AnalysisException) as e:
-        logger.exception(e)
+    except CapturedException as err:
+        logger.error(err)
         sys.exit(1)
 
     finally:
@@ -62,6 +79,6 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception as e:
-        logger.exception(e)
+    except Exception as err:
+        logger.exception(err)
         sys.exit(1)

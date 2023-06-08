@@ -53,7 +53,7 @@ def main() -> None:
 
     try:
         for bucket in (keeper.src_path, keeper.tgt_path, keeper.coords_path):
-            spark.check_s3_object_existence(key=bucket.split(sep="/")[2], type="bucket")
+            spark.check_s3_object_existence(key=bucket.split(sep="/")[2], type="bucket")  # type: ignore
     except S3ServiceError as err:
         logger.error(err)
         sys.exit(1)
