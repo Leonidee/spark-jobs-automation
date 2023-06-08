@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
-import boto3
 import findspark
-from botocore.exceptions import ClientError
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -17,7 +14,7 @@ from src.helper import SparkHelper
 from src.logger import SparkLogger
 
 if TYPE_CHECKING:
-    from typing import List, Literal, Set, Tuple
+    from typing import Literal, Tuple
 
     from pyspark.sql import DataFrame  # type: ignore
 
@@ -32,29 +29,17 @@ class SparkRuntimeError(Exception):
 class SparkRunner(SparkHelper):
     """Data processor and datamarts collector class.
 
-    ## Usage
-    Initialize all needed dataclasses:
-    >>> keeper = ArgsKeeper(
-    ...     date="2022-04-26",
-    ...     depth=2,
-    ...     src_path="s3a://data-ice-lake-05/messager-data/analytics/geo-events",
-    ...     tgt_path="s3a://data-ice-lake-05/messager-data/analytics/prod/friend_recommendation_datamart",
-    ...     processed_dttm=str(datetime.now()),
-    ...     )
-    >>> conf = SparkConfigKeeper(
-    ...     executor_memory="3000m", executor_cores=1, max_executors_num=12
-    ...     )
-
+    ## Examples
     Initialize `SparkRunner` class object:
     >>> spark = SparkRunner()
 
     Start session:
-    >>> spark.init_session(app_name="data-collector-app", spark_conf=conf, log4j_level="INFO")
+    >>> spark.init_session(app_name="test-app", spark_conf=conf, log4j_level="INFO")
 
     And now execute chosen job:
     >>> spark.collect_friend_recommendation_datamart(keeper=keeper)
 
-    Don't forget to always stop session:
+    Don't forget to stop session:
     >>> spark.stop_session()
     """
 
@@ -87,33 +72,18 @@ class SparkRunner(SparkHelper):
 
         self.spark = (
             SparkSession.builder.master("yarn")
+            .config("spark.hadoop.fs.s3a.access.key", self.AWS_ACCESS_KEY_ID)
+            .config("spark.hadoop.fs.s3a.secret.key", self.AWS_SECRET_ACCESS_KEY)
+            .config("spark.hadoop.fs.s3a.endpoint", self.AWS_ENDPOINT_URL)
             .config(
-                map={
-                    # S3 Service configuration:
-                    "spark.hadoop.fs.s3a.access.key": self.AWS_ACCESS_KEY_ID,
-                    "spark.hadoop.fs.s3a.secret.key": self.AWS_SECRET_ACCESS_KEY,
-                    "spark.hadoop.fs.s3a.endpoint": self.AWS_ENDPOINT_URL,
-                    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
-                    # Spark configurations:
-                    "spark.executor.memory": spark_conf.executor_memory,
-                    "spark.executor.cores": str(spark_conf.executor_cores),
-                    "spark.dynamicAllocation.maxExecutors": str(
-                        spark_conf.max_executors_num
-                    ),
-                }
+                "spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem"
             )
-            # .config("spark.hadoop.fs.s3a.access.key", self.AWS_ACCESS_KEY_ID)
-            # .config("spark.hadoop.fs.s3a.secret.key", self.AWS_SECRET_ACCESS_KEY)
-            # .config("spark.hadoop.fs.s3a.endpoint", self.AWS_ENDPOINT_URL)
-            # .config(
-            #     "spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem"
-            # )
-            # .config("spark.executor.memory", spark_conf.executor_memory)
-            # .config("spark.executor.cores", str(spark_conf.executor_cores))
-            # .config(
-            #     "spark.dynamicAllocation.maxExecutors",
-            #     str(spark_conf.max_executors_num),
-            # )
+            .config("spark.executor.memory", spark_conf.executor_memory)
+            .config("spark.executor.cores", str(spark_conf.executor_cores))
+            .config(
+                "spark.dynamicAllocation.maxExecutors",
+                str(spark_conf.max_executors_num),
+            )
             .appName(app_name)
             .getOrCreate()
         )
@@ -304,9 +274,7 @@ class SparkRunner(SparkHelper):
 
         return sdf
 
-    def _get_users_actual_data_dataframe(
-        self, keeper: ArgsKeeper, cities_coord_path: str
-    ) -> DataFrame:
+    def _get_users_actual_data_dataframe(self, keeper: ArgsKeeper) -> DataFrame:
         """Returns dataframe with user information based on sent messages
 
         ## Parameters
@@ -358,8 +326,6 @@ class SparkRunner(SparkHelper):
             when,
         )
 
-        _CITIES_COORD_PATH = cities_coord_path
-
         self.logger.debug(f"Getting input data from: '{keeper.src_path}'")
 
         src_paths = self._get_src_paths(event_type="message", keeper=keeper)
@@ -393,13 +359,11 @@ class SparkRunner(SparkHelper):
         sdf = self._get_event_location(
             dataframe=sdf,
             event_type="message",
-            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
+            cities_coord_path=keeper.coords_path,
         )
 
         self.logger.debug("Getting cities coordinates dataframe from s3")
-        cities_coords_sdf = self.spark.read.parquet(
-            "s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates"
-        )
+        cities_coords_sdf = self.spark.read.parquet(keeper.coords_path)
 
         sdf = (
             sdf.withColumn(
@@ -504,10 +468,7 @@ class SparkRunner(SparkHelper):
 
         _job_start = datetime.now()
 
-        sdf = self._get_users_actual_data_dataframe(
-            keeper=keeper,
-            cities_coord_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
-        )
+        sdf = self._get_users_actual_data_dataframe(keeper=keeper)
 
         self.logger.debug("Collecting dataframe with travels data. Processing...")
         travels_sdf = (

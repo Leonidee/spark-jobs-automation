@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-from pyspark.sql.utils import AnalysisException, CapturedException  # type: ignore
+from pyspark.sql.utils import CapturedException  # type: ignore
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
@@ -53,12 +53,7 @@ def main() -> None:
 
     try:
         for bucket in (keeper.src_path, keeper.tgt_path, keeper.coords_path):
-            if not spark.check_s3_object_existence(
-                key=bucket.split(sep="/")[2], type="bucket"
-            ):
-                raise S3ServiceError(
-                    f'Bucket {bucket.split(sep="/")[2]} does not exists'
-                )
+            spark.check_s3_object_existence(key=bucket.split(sep="/")[2], type="bucket")
     except S3ServiceError as err:
         logger.error(err)
         sys.exit(1)
@@ -71,7 +66,7 @@ def main() -> None:
         )
         spark.collect_users_info_datamart(keeper=keeper)
 
-    except (CapturedException, AnalysisException) as err:
+    except CapturedException as err:
         logger.error(err)
         sys.exit(1)
 
@@ -84,5 +79,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as err:
-        logger.error(err)
+        logger.exception(err)
         sys.exit(1)

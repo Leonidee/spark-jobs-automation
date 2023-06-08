@@ -26,6 +26,8 @@ from src.logger import SparkLogger
 
 
 class SparkHelper:
+    """Class for helping `SparkRunner` runtime"""
+
     def __init__(self) -> None:
         self.config = Config("config.yaml")
 
@@ -81,21 +83,49 @@ class SparkHelper:
         """Will check if given key exists on S3.
 
         ## Parameters
-        `s3` : S3 connection instance of `botocore.client.BaseClient` class.
-
         `key` : Key to check.
             If you check a 'bucket' type should be just name of bucket.
             If some 'object' it must be full path to, for example: `s3a://data-ice-lake-05/messager-data/...`
 
-        `type` : Type of key to check.
+        `type` : Type of key to check. Must be 'object' or 'bucket'.
+
+        ## Raises
+        `S3ServiceError` : Raises if bucket not exitsts on S3 (when `bucket` type specified) or `botocore.exceptions.ClientError` occured in runtime.
+        `KeyError` : If wrong `type` specified.
 
         ## Returns
         `bool` : `True` if key exists and `False` if not.
 
-        ## Raises
-        `KeyError` : If wrong `type` specified.
+        ## Examples
+        >>> helper = SparkHelper()
+
+        Check existing bucket:
+        >>> key = "s3a://data-ice-lake-05/messager-data/analytics/geo-events/event_type=message/date=2022-01-20"
+        >>> result = helper.check_s3_object_existence(key=key.split(sep="/")[2], type='bucket')
+        >>> print(result)
+        True
+
+        Check non-existing bucket:
+        >>> key = "s3a://data-ice-lake-10/messager-data/analytics/geo-events/event_type=message/date=2022-01-20"
+        >>> result = helper.check_s3_object_existence(key=key.split(sep="/")[2], type='bucket')
+        S3ServiceError: Bucket 'data-ice-lake-10' does not exists
+
+        Check existing object:
+        >>> key = "s3a://data-ice-lake-05/messager-data/analytics/geo-events/event_type=message/date=2022-01-20"
+        >>> result = helper.check_s3_object_existence(key=key, type='object')
+        >>> print(result)
+        True
+
+        Check non-existing object:
+        >>> key = "s3a://data-ice-lake-05/messager-data/analytics/geo-events/event_type=message/date=2018-01-01"
+        >>> result = helper.check_s3_object_existence(key=key, type='object')
+        >>> print(result)
+        False
         """
-        self.logger.debug(f"Checking '{key}' existence on S3")
+        if type not in ("object", "bucket"):
+            raise KeyError("Only 'object' or 'bucket' are allowed as 'type'")
+
+        self.logger.debug(f"Checking '{key}' {type} existence on S3")
 
         if type == "object":
             try:
@@ -112,13 +142,13 @@ class SparkHelper:
 
                     return True
 
+                else:
+                    return False
+
             except ClientError as err:
                 raise S3ServiceError(str(err))
 
-            else:
-                return False
-
-        elif type == "bucket":
+        if type == "bucket":
             try:
                 self.s3.head_bucket(Bucket=key)
                 self.logger.debug("OK")
@@ -126,10 +156,10 @@ class SparkHelper:
                 return True
 
             except ClientError as err:
-                raise S3ServiceError(str(err))
-
-        else:
-            raise KeyError("Only 'object' or 'bucket' are allowed as 'type'")
+                if "HeadBucket operation: Not Found" in str(err):
+                    raise S3ServiceError(f"Bucket '{key}' does not exists")
+                else:
+                    raise S3ServiceError(str(err))
 
     def _get_src_paths(
         self,
@@ -140,35 +170,33 @@ class SparkHelper:
 
         Collects paths corresponding to the passed in `keeper` object arguments and checks if each path exists on S3. Collects only existing paths.
 
-        If no paths for given arguments kill process.
+        If no paths for given arguments raises.
 
         ## Parameters
-        `event_type` : Event type of partitions
-        `keeper` : Dataclass-like object with Spark Job arguments
+        `event_type` : Event type of partitions.
+
+        `keeper` : `ArgsKeeper` class instance with Spark Job arguments.
+
+        ## Raises
+        `S3ServiceError` : If no paths for given arguments was found on S3.
 
         ## Returns
-        `List[str]` : List with existing partition paths on s3
+        `Tuple[str]` : Tuple with unique existing partition paths on S3.
 
         ## Examples
-        >>> keeper = ArgsKeeper(date="2022-03-12", depth=10, ..., src_path="s3a://data-ice-lake-05/messager-data/analytics/geo-events")
-        >>> src_paths = self._get_src_paths(event_type="message", keeper=keeper)
-        >>> print(len(src_paths))
-        4 # only 4 paths exists on s3
-        >>> print(type(src_paths))
-        <class 'list'>
-        >>> for _ in src_paths: print(_) # how it looks
-        "s3a://data-ice-lake-05/messager-data/analytics/geo-events/event_type=message/date=2022-03-12"
-        ...
-        "s3a://data-ice-lake-05/messager-data/analytics/geo-events/event_type=message/date=2022-03-11"
+        >>> keeper = ArgsKeeper(
+        ...     date="2022-04-26",
+        ...     depth=10,
+        ...     src_path = "s3a://data-ice-lake-04/messager-data/analytics/geo-events",
+        ...     ...,
+        ...     )
+        >>> paths = helper._get_src_paths(event_type='message', keeper=keeper)
+        >>> print(len(paths))
+        10
+        >>> print(paths[0])
+        s3a://data-ice-lake-04/messager-data/analytics/geo-events/event_type=message/date=2022-04-26
         """
         self.logger.debug(f"Collecting src paths for '{event_type}' event type")
-
-        if not self.check_s3_object_existence(
-            key=keeper.src_path.split(sep="/")[2], type="bucket"
-        ):
-            raise S3ServiceError(
-                f'Bucket {keeper.src_path.split(sep="/")[2]} does not exists'
-            )
 
         date = datetime.strptime(keeper.date, r"%Y-%m-%d").date()
 
@@ -183,15 +211,11 @@ class SparkHelper:
         existing_paths = set()
 
         for path in paths:
-            try:
-                if self.check_s3_object_existence(key=path, type="object"):
-                    existing_paths.add(path)
-                else:
-                    self.logger.debug(f"No data for '{path}' path. Skipping")
-                    continue
-
-            except ClientError as e:
-                raise S3ServiceError(str(e))
+            if self.check_s3_object_existence(key=path, type="object"):
+                existing_paths.add(path)
+            else:
+                self.logger.debug(f"No data for '{path}' path. Skipping")
+                continue
 
         if not existing_paths:
             raise S3ServiceError("No data on S3 for given arguments")
