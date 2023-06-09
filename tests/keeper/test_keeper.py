@@ -1,35 +1,13 @@
 from __future__ import annotations
 
 import sys
+from datetime import date, timedelta
 from pathlib import Path
-from datetime import timedelta, date
 
 import pytest
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.keeper import ArgsKeeper, SparkConfigKeeper
-
-
-@pytest.fixture
-def keeper() -> ArgsKeeper:
-    """Returns instance of `ArgsKeeper` dataclass with filled valid parameters"""
-    keeper = ArgsKeeper(
-        date="2022-04-03",
-        depth=10,
-        src_path="s3a://...",
-        tgt_path="s3a://...",
-        processed_dttm="2023-05-22T12:03:25",
-    )
-    return keeper
-
-
-@pytest.fixture
-def config_keeper() -> SparkConfigKeeper:
-    """Returns instance of `SparkConfigKeeper` dataclass with filled valid parameters"""
-    conf = SparkConfigKeeper(
-        executor_memory="2g", executor_cores=1, max_executors_num=24
-    )
-    return conf
 
 
 class TestArgsKeeper:

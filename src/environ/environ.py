@@ -8,7 +8,6 @@ from typing import Tuple, overload
 from dotenv import find_dotenv, load_dotenv
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.config import Config
 from src.environ.exceptions import DotEnvError, EnvironNotSet
 from src.logger import SparkLogger
 
@@ -35,9 +34,9 @@ class EnvironManager:
     src.environ.exception.EnvironNotSet: Environment variables not set properly. You can find list of required variables here -> $PROJECT_DIR/templates/.env.template # <---- raised exception
     """
 
-    def __init__(self) -> None:
-        config = Config(config_name="config.yaml")
+    __slots__ = "_find_dotenv", "_read_dotenv", "logger"
 
+    def __init__(self) -> None:
         self._find_dotenv = find_dotenv
         self._read_dotenv = load_dotenv
 

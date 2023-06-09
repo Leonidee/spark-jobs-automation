@@ -1,11 +1,10 @@
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.config import EnableToGetConfig
-from src.config import Config
+from src.config import Config, EnableToGetConfig
 
 
 class TestConfig:

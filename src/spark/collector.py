@@ -3,25 +3,27 @@ from __future__ import annotations
 import sys
 from datetime import datetime
 from pathlib import Path
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from typing import Literal, Tuple
 
-    import pyspark
+    import pyspark.sql
 
     from src.keeper import ArgsKeeper, SparkConfigKeeper
 
 from typing import Literal
+
 from src.keeper import SparkConfigKeeper
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.spark.runner import SparkRunner
 from src.logger import SparkLogger
+from src.spark.runner import SparkRunner
 
 
 class DatamartCollector(SparkRunner):
+    __slots__ = "logger"
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -100,7 +102,7 @@ class DatamartCollector(SparkRunner):
         lat_1, lon_1 = next(cols)  # latitude and longitude of first point
         lat_2, lon_2 = next(cols)  # same for second point
 
-        self.logger.debug("Checking coordinates columns existance")
+        self.logger.debug("Checking coordinates columns existance in dataframe")
 
         if not all(col in df.columns for col in (lat_1, lon_1, lat_2, lon_2)):
             raise KeyError(
@@ -108,7 +110,7 @@ class DatamartCollector(SparkRunner):
             )
         self.logger.debug("OK")
 
-        self.logger.debug("Processing")
+        self.logger.debug("Processing computations")
 
         # Computations itself
         # I splited them into parts
@@ -127,6 +129,9 @@ class DatamartCollector(SparkRunner):
         return df.withColumn("distance", F.round(distance, 0))
 
     def _get_cities_coords_df(self, keeper: ArgsKeeper) -> pyspark.sql.DataFrame:
+        self.logger.debug(
+            f"Getting cities coordinates dataframe from S3 paths -> {keeper.coords_path}"
+        )
         return self.spark.read.parquet(keeper.coords_path)  # type: ignore
 
     def _add_event_location_to_df(
@@ -172,17 +177,16 @@ class DatamartCollector(SparkRunner):
         +-------+----------+-------------------+------------------+--------------------+-------+-----------+
         """
 
-        self.logger.debug(f"Getting event location for '{event}' event type")
+        self.logger.debug(f"Adding event location for '{event}' event type")
 
-        from pyspark.sql import Window as W  # type: ignore
         import pyspark.sql.functions as F  # type: ignore
+        from pyspark.sql import Window as W  # type: ignore
 
         _PARTITION_BY = (
             ["user_id", "subscription_channel"]
             if event == "subscription"
             else "message_id"
         )
-        self.logger.debug(f"Will partition by: {_PARTITION_BY}")
 
         self.logger.debug("Joining given dataframe with cities coordinates")
 
@@ -193,11 +197,12 @@ class DatamartCollector(SparkRunner):
             df=sdf,
             coord_cols_prefix=("event", "city"),
         )
-        self.logger.debug(
-            "Collecting resulting dataframe of '_get_event_location' function"
-        )
+
+        self.logger.debug(f"Will partition by: {_PARTITION_BY}")
 
         w = W().partitionBy(_PARTITION_BY).orderBy(F.asc("distance"))  # type: ignore
+
+        self.logger.debug("Collecting resulting dataframe")
 
         sdf = (
             sdf.withColumn(
@@ -252,8 +257,8 @@ class DatamartCollector(SparkRunner):
         """
         self.logger.debug("Collecting dataframe of users actual data")
 
-        from pyspark.sql import Window as W  # type: ignore
         import pyspark.sql.functions as F  # type: ignore
+        from pyspark.sql import Window as W  # type: ignore
 
         src_paths = self._get_src_paths(event_type="message", keeper=keeper)
         events_sdf = (
@@ -262,7 +267,7 @@ class DatamartCollector(SparkRunner):
             .parquet(*src_paths)
         )
 
-        self.logger.debug("Collecting dataframe. Processing...")
+        self.logger.debug("Processing messages data")
 
         sdf = (
             events_sdf.where(events_sdf.message_from.isNotNull())
@@ -295,6 +300,8 @@ class DatamartCollector(SparkRunner):
         # [2023-06-09 08:04:16] {__main__:75} ERROR:  Column city_id#180 are ambiguous
         # It's probably because you joined several Datasets together, and some of these Datasets are the same.
         # This column points to one of the Datasets but Spark is unable to figure out which one
+
+        self.logger.debug("Preparing users actual data results")
 
         w = W().partitionBy("user_id").orderBy(F.desc("msg_ts"))
 
@@ -377,8 +384,8 @@ class DatamartCollector(SparkRunner):
 
         self.logger.info(f"Starting collecting '{_DATAMART_NAME}'")
 
-        from pyspark.sql import Window as W  # type: ignore
         import pyspark.sql.functions as F  # type: ignore
+        from pyspark.sql import Window as W  # type: ignore
         from pyspark.sql.utils import AnalysisException  # type: ignore
 
         _job_start = datetime.now()
@@ -445,7 +452,7 @@ class DatamartCollector(SparkRunner):
             .select("user_id", F.col("prev_travel_city").alias("home_city"))
         )
 
-        self.logger.debug("Collecting datamart")
+        self.logger.debug("Preparing results")
 
         sdf = (
             sdf.drop_duplicates(subset=["user_id"])
@@ -537,16 +544,16 @@ class DatamartCollector(SparkRunner):
 
         self.logger.info(f"Staring collecting '{_DATAMART_NAME}'")
 
-        from pyspark.sql import Window  # type: ignore
         import pyspark.sql.functions as F  # type: ignore
-        from pyspark.storagelevel import StorageLevel  # type: ignore
+        from pyspark.sql import Window  # type: ignore
         from pyspark.sql.types import (  # type: ignore
-            StructType,
-            StructField,
-            IntegerType,
             DateType,
+            IntegerType,
             LongType,
+            StructField,
+            StructType,
         )
+        from pyspark.storagelevel import StorageLevel  # type: ignore
 
         _job_start = datetime.now()
 

@@ -26,7 +26,21 @@ from src.logger import SparkLogger
 
 
 class SparkHelper:
-    """Class for helping `SparkRunner` runtime"""
+    """Helper class for Apache Spark"""
+
+    __slots__ = (
+        "config",
+        "logger",
+        "s3",
+        "AWS_ENDPOINT_URL",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "HADOOP_CONF_DIR",
+        "YARN_CONF_DIR",
+        "JAVA_HOME",
+        "SPARK_HOME",
+        "PYTHONPATH",
+    )
 
     def __init__(self) -> None:
         self.config = Config("config.yaml")

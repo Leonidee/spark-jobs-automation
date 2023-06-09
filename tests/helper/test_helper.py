@@ -5,27 +5,7 @@ import pytest
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.helper import S3ServiceError, SparkHelper
-from src.keeper import ArgsKeeper
-
-
-@pytest.fixture
-def helper() -> SparkHelper:
-    """Returns instance of `SparkHelper` class"""
-    return SparkHelper()
-
-
-@pytest.fixture
-def keeper() -> ArgsKeeper:
-    """Returns instance of `ArgsKeeper` class"""
-    keeper = ArgsKeeper(
-        date="2022-04-03",
-        depth=10,
-        src_path="s3a://...",
-        tgt_path="s3a://...",
-        processed_dttm="2023-05-22T12:03:25",
-    )
-    return keeper
+from src.helper import S3ServiceError
 
 
 class TestCheckS3ObjectExistence:

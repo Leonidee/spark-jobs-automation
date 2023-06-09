@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AirflowTaskData:
     task: str
     dag: str
@@ -19,7 +19,7 @@ class MessageType(Enum):
     failed = "failed"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TelegramMessage:
     task_data: AirflowTaskData
     type: MessageType

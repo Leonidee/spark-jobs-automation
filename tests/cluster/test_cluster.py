@@ -1,32 +1,23 @@
-import sys
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 import os
 import random
+import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
-
 from requests.exceptions import (
     ConnectionError,
     HTTPError,
     InvalidSchema,
-    Timeout,
     InvalidURL,
-    MissingSchema,
     JSONDecodeError,
+    MissingSchema,
+    Timeout,
 )
-
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.cluster import YandexAPIError
-from src.cluster import DataProcCluster
-
-
-@pytest.fixture
-def cluster() -> DataProcCluster:
-    """Returns instance of `DataProcCluster` class"""
-    return DataProcCluster(retry_delay=1)
 
 
 class TestGetIAMToken:

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import sys
-from datetime import datetime
 import os
-from pathlib import Path
+import sys
 import time
+from datetime import datetime
 from logging import getLogger
-
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -17,19 +16,19 @@ from requests.exceptions import (
     ConnectionError,
     HTTPError,
     InvalidSchema,
-    Timeout,
     InvalidURL,
-    MissingSchema,
     JSONDecodeError,
+    MissingSchema,
+    Timeout,
 )
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.environ import EnvironManager
-from src.notifyer.exceptions import UnableToSendMessage, AirflowContextError
-from src.notifyer.datamodel import AirflowTaskData, TelegramMessage, MessageType
 from src.base import BaseRequestHandler
+from src.environ import EnvironManager
 from src.logger import SparkLogger
+from src.notifyer.datamodel import AirflowTaskData, MessageType, TelegramMessage
+from src.notifyer.exceptions import AirflowContextError, UnableToSendMessage
 
 
 class TelegramNotifyer(BaseRequestHandler):
@@ -42,6 +41,8 @@ class TelegramNotifyer(BaseRequestHandler):
 
     See `.env.template` for more details.
     """
+
+    __slots__ = "_CHAT_ID", "_BOT_TOKEN"
 
     def __init__(
         self,
@@ -81,7 +82,7 @@ class TelegramNotifyer(BaseRequestHandler):
         self._CHAT_ID, self._BOT_TOKEN = map(os.getenv, _REQUIRED_VARS)
         environ.check_environ(var=_REQUIRED_VARS)  # type: ignore
 
-    def __make_url(self, message: TelegramMessage) -> str:
+    def _make_url(self, message: TelegramMessage) -> str:
         """Make Telegram API URL to send message
 
         ## Parameters
@@ -253,6 +254,6 @@ class TelegramNotifyer(BaseRequestHandler):
 
         self.logger.debug(f"{message=}")
 
-        output = self._send_message(url=self.__make_url(message=message))
+        output = self._send_message(url=self._make_url(message=message))
 
         return output

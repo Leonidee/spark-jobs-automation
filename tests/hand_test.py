@@ -12,9 +12,10 @@ from requests.exceptions import JSONDecodeError
 sys.path.append(str(Path(__file__).parent.parent))
 # package
 sys.path.append(str(Path(__file__).parent.parent))
+from src.base import BaseRequestHandler
 from src.config import Config, EnableToGetConfig
 from src.environ import DotEnvError, EnvironNotSet
-from src.helper import S3ServiceError
+from src.helper import S3ServiceError, SparkHelper
 from src.keeper import ArgsKeeper, SparkConfigKeeper
 from src.logger import SparkLogger
 from src.spark import SparkRunner
@@ -22,29 +23,35 @@ from src.spark import SparkRunner
 logger = SparkLogger().get_logger(logger_name=__name__)
 
 
+class A:
+    __slots__ = "a", "b"
+
+    def __init__(self, a, b) -> None:
+        self.a = a
+        self.b = b
+
+
+class B(A):
+    __slots__ = "c"
+
+    def __init__(self, a, b, c) -> None:
+        super().__init__(a, b)
+        self.c = c
+
+    def get_slots(self):
+        for _ in self.__slots__:
+            print(_)
+
+
 def main():
-    keeper = ArgsKeeper(
-        date="2022-04-26",
-        depth=62,
-        src_path="s3a://data-ice-lake-04/messager-data/analytics/geo-events",
-        tgt_path="s3a://data-ice-lake-05/messager-data/analytics/tmp/location_zone_agg_datamart",
-        coords_path="s3a://data-ice-lake-06/messager-data/analytics/cities-coordinates",
-        processed_dttm="2023-05-22T12:03:25",
-    )
+    b = B(a="..", b="..", c="some")
 
-    spark = SparkRunner()
+    b.a = "new"
+    b.new = 1
 
-    try:
-        for bucket in (keeper.src_path, keeper.tgt_path, keeper.coords_path):
-            if not spark.check_s3_object_existence(
-                key=bucket.split(sep="/")[2], type="bucket"
-            ):
-                raise S3ServiceError(
-                    f'Bucket {bucket.split(sep="/")[2]} does not exists'
-                )
-    except S3ServiceError as err:
-        logger.exception(err)
-        sys.exit(1)
+    b.get_slots()
+
+    print(b.new)
 
 
 if __name__ == "__main__":

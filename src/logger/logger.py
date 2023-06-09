@@ -53,15 +53,20 @@ class SparkLogger(Logger):
         logger_handler = StreamHandler(stream=sys.stdout)
 
         colored_formatter = ColoredFormatter(
-            fmt="[%(asctime)s] {%(name)s:%(lineno)d} %(levelname)s: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
+            fmt=r"[%(asctime)s] {%(name)s.%(funcName)s:%(lineno)d} %(levelname)s: %(message)s",
+            datefmt=r"%Y-%m-%d %H:%M:%S",
             level_styles=dict(
                 info=dict(color="green"),
-                error=dict(color="red", bold=False, bright=True),  # type: ignore
+                error=dict(color="red", bright=True),  # type: ignore
+                exception=dict(color="red", bright=True),  # type: ignore
+                warning=dict(color="magenta", bold=True),
+                critical=dict(color="red", bold=True),
+                debug=dict(color="blue", bright=True),
             ),
             field_styles=dict(
                 asctime=dict(color="magenta"),
                 name=dict(color="cyan"),
+                funcName=dict(color="magenta"),
                 levelname=dict(color="yellow", bold=False, bright=True),  # type: ignore
                 lineno=dict(color="white"),
             ),

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import sys
 import os
-from pathlib import Path
-import time
 import re
-from typing import TYPE_CHECKING
+import sys
+import time
 from logging import getLogger
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from typing import Literal
@@ -16,16 +16,16 @@ from requests.exceptions import (
     ConnectionError,
     HTTPError,
     InvalidSchema,
-    Timeout,
     InvalidURL,
-    MissingSchema,
     JSONDecodeError,
+    MissingSchema,
+    Timeout,
 )
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.environ import EnvironManager
-from src.cluster.exceptions import YandexAPIError
 from src.base import BaseRequestHandler
+from src.cluster.exceptions import YandexAPIError
+from src.environ import EnvironManager
 from src.logger import SparkLogger
 
 
@@ -56,6 +56,13 @@ class DataProcCluster(BaseRequestHandler):
     ... [2023-05-26 12:59:39] {src.cluster.cluster:160} INFO: Current cluster status is: RUNNING
     ... [2023-05-26 12:59:39] {src.cluster.cluster:165} INFO: The target status has been reached!
     """
+
+    __slots__ = (
+        "_CLUSTER_ID",
+        "_BASE_URL",
+        "_OAUTH_TOKEN",
+        "_IAM_TOKEN",
+    )
 
     def __init__(
         self,

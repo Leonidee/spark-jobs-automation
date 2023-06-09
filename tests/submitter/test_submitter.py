@@ -1,55 +1,24 @@
-import sys
-from pathlib import Path
 import os
 import random
+import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
+# tests
+import pytest
 from requests.exceptions import (
     ConnectionError,
     HTTPError,
     InvalidSchema,
-    Timeout,
     InvalidURL,
-    MissingSchema,
     JSONDecodeError,
+    MissingSchema,
+    Timeout,
 )
-
-# tests
-import pytest
-from unittest.mock import patch, MagicMock
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.submitter import (
-    UnableToSubmitJob,
-    UnableToSendRequest,
-    UnableToGetResponse,
-    SparkSubmitter,
-)
-from src.keeper import ArgsKeeper
-
-
-@pytest.fixture
-def submitter():
-    os.environ["CLUSTER_API_BASE_URL"] = "http://example.com"
-    return SparkSubmitter(session_timeout=1, retry_delay=1)
-
-
-@pytest.fixture
-def test_job_name():
-    return "users_info_datamart_job"
-
-
-@pytest.fixture
-def keeper() -> ArgsKeeper:
-    """Returns instance of `ArgsKeeper` dataclass with filled valid parameters"""
-    keeper = ArgsKeeper(
-        date="2022-04-03",
-        depth=10,
-        src_path="s3a://...",
-        tgt_path="s3a://...",
-        processed_dttm="2023-05-22T12:03:25",
-    )
-    return keeper
+from src.submitter import UnableToGetResponse, UnableToSendRequest, UnableToSubmitJob
 
 
 class TestSubmitJob:

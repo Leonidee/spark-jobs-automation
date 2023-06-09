@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import findspark
-
-from typing import TYPE_CHECKING
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -41,6 +40,8 @@ class SparkRunner(SparkHelper):
     >>> spark.stop_session()
     """
 
+    __slots__ = "logger", "spark"
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -61,7 +62,7 @@ class SparkRunner(SparkHelper):
         `spark_conf` : `SparkConfigKeeper` object with Spark configuration properties
         `log4j_level` : Spark Context Java logging level, by default "WARN"
         """
-        self.logger.info("Initializing Spark Session")
+        self.logger.info("Initializing Spark session")
 
         findspark.init(spark_home=self.SPARK_HOME, python_path=self.PYTHONPATH)
         findspark.find()
@@ -95,7 +96,7 @@ class SparkRunner(SparkHelper):
     def stop_session(self) -> None:
         """Stop active Spark Session"""
 
-        self.logger.info("Stopping Spark Session")
+        self.logger.info("Stopping active session")
 
         self.spark.stop()
 

@@ -1,46 +1,20 @@
 import sys
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 from datetime import datetime
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
+import pytest
 from requests.exceptions import (
     ConnectionError,
     HTTPError,
     InvalidSchema,
-    Timeout,
     JSONDecodeError,
+    Timeout,
 )
-
-
-import pytest
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.notifyer import (
-    UnableToSendMessage,
-    AirflowContextError,
-    AirflowTaskData,
-    TelegramNotifyer,
-)
-
-
-@pytest.fixture
-def notifyer():
-    """Returns instance of `TelegramNotifyer` class"""
-    return TelegramNotifyer(max_retries=3, retry_delay=1)
-
-
-@pytest.fixture
-def airflow_context():
-    """Returns Airflow context dictionary"""
-
-    return dict(
-        task_instance=MagicMock(
-            task_id="my_task_id",
-            dag_id="my_dag_id",
-        ),
-        execution_date="2022-01-01T00:00:00.000000",
-    )
+from src.notifyer import AirflowContextError, AirflowTaskData, UnableToSendMessage
 
 
 class TestCollectTaskContext:

@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
@@ -11,6 +10,8 @@ from src.config import Config
 
 class BaseRequestHandler:
     """Base Requests handler class. Contains basic attributes. Must be inherited by other classes."""
+
+    __slots__ = "_MAX_RETRIES", "_DELAY", "_SESSION_TIMEOUT", "config", "logger"
 
     def __init__(
         self,

@@ -111,8 +111,7 @@ class Config:
         if not CONFIG_PATH:  # if not find config_name if project files
             raise EnableToGetConfig(
                 "Enable to find config file in project!\n"
-                "Please, create one or explicitly specify the file name.\n"
-                "You can find config file template here -> `$PROJECT_DIR/templates/config.template.yaml`"
+                "Please, create one or explicitly specify the full path to config file."
             )
         else:
             return CONFIG_PATH
