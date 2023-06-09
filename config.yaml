@@ -3,7 +3,7 @@ environ:
 
 logging:
   python_log_level: DEBUG
-  log4j_level: WARN
+  log4j_level: INFO 
 
 spark:
   application_name: DATAMART-COLLECTOR-APP

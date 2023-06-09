@@ -40,8 +40,8 @@ class DatamartCollector(SparkRunner):
     def stop_session(self) -> None:
         return super().stop_session()
 
-    def _compute_distance(
-        self, dataframe: pyspark.sql.DataFrame, coord_cols_prefix: Tuple[str, str]
+    def _compute_distances(
+        self, df: pyspark.sql.DataFrame, coord_cols_prefix: Tuple[str, str]
     ) -> pyspark.sql.DataFrame:
         """Compute distance between two point for each row of DataFrame
 
@@ -86,9 +86,7 @@ class DatamartCollector(SparkRunner):
         """
         self.logger.debug("Computing distances")
 
-        from pyspark.sql.functions import asin, col, cos, radians  # type: ignore
-        from pyspark.sql.functions import round as _round  # type: ignore
-        from pyspark.sql.functions import sin, sqrt  # type: ignore
+        import pyspark.sql.functions as F  # type: ignore
 
         self.logger.debug(f"Given 'coord_cols_prefix': {coord_cols_prefix}")
 
@@ -98,44 +96,44 @@ class DatamartCollector(SparkRunner):
             )
 
         cols = ((col + "_lat", col + "_lon") for col in coord_cols_prefix)
-        lat_1, lon_1 = next(cols)
-        lat_2, lon_2 = next(cols)
+
+        lat_1, lon_1 = next(cols)  # latitude and longitude of first point
+        lat_2, lon_2 = next(cols)  # same for second point
 
         self.logger.debug("Checking coordinates columns existance")
 
-        if not all(col in dataframe.columns for col in (lat_1, lon_1, lat_2, lon_2)):
+        if not all(col in df.columns for col in (lat_1, lon_1, lat_2, lon_2)):
             raise KeyError(
                 "DataFrame should contains coordinates columns with names listed in 'coord_cols_prefix' argument"
             )
         self.logger.debug("OK")
 
         self.logger.debug("Processing")
-        # new
 
-        # old
-        sdf = (
-            dataframe.withColumn("dlat", radians(col(lat_2)) - radians(col(lat_1)))
-            .withColumn("dlon", radians(col(lon_2)) - radians(col(lon_1)))
-            .withColumn(
-                "distance_a",
-                sin(col("dlat") / 2) ** 2
-                + cos(radians(col(lat_1)))
-                * cos(radians(col(lat_2)))
-                * sin(col("dlon") / 2) ** 2,
-            )
-            .withColumn("distance_b", asin(sqrt(col("distance_a"))))
-            .withColumn("distance_c", 2 * 6371 * col("distance_b"))
-            .withColumn("distance", _round(col("distance_c"), 0))
-            .drop("dlat", "dlon", "distance_a", "distance_b", "distance_c")
+        # Computations itself
+        # I splited them into parts
+        distance_lat = F.radians(F.col(lat_2)) - F.radians(F.col(lat_1))
+        distance_lon = F.radians(F.col(lon_2)) - F.radians(F.col(lon_1))
+
+        part_one = (
+            F.sin(distance_lat / 2) ** 2
+            + F.cos(F.radians(F.col(lat_1)))
+            * F.cos(F.radians(F.col(lat_2)))
+            * F.sin(distance_lon / 2) ** 2
         )
+        part_two = F.sin(F.sqrt(part_one))  # type: ignore
+        distance = 2 * 6371 * part_two  # type: ignore
 
-        return sdf
+        return df.withColumn("distance", F.round(distance, 0))
 
-    def _get_event_location(
+    def _get_cities_coords_df(self, keeper: ArgsKeeper) -> pyspark.sql.DataFrame:
+        return self.spark.read.parquet(keeper.coords_path)  # type: ignore
+
+    def _add_event_location_to_df(
         self,
-        dataframe: pyspark.sql.DataFrame,
-        event_type: Literal["message", "reaction", "subscription", "registration"],
-        cities_coord_path: str,
+        df: pyspark.sql.DataFrame,
+        cities_coord_df: pyspark.sql.DataFrame,
+        event: Literal["message", "reaction", "subscription", "registration"],
     ) -> pyspark.sql.DataFrame:
         """Takes a DataFrame containing events and their coordinates, calculates the distance to each city, and keeps only the closest cities.
 
@@ -174,43 +172,39 @@ class DatamartCollector(SparkRunner):
         +-------+----------+-------------------+------------------+--------------------+-------+-----------+
         """
 
-        self.logger.debug(
-            f"'_get_event_location': Getting event location for '{event_type}' event type"
-        )
+        self.logger.debug(f"Getting event location for '{event}' event type")
 
-        from pyspark.sql import Window  # type: ignore
-        from pyspark.sql.functions import asc, col, row_number  # type: ignore
-
-        self.logger.debug("Getting cities coordinates dataframe from S3")
-        cities_coords_sdf = self.spark.read.parquet(cities_coord_path)
+        from pyspark.sql import Window as W  # type: ignore
+        import pyspark.sql.functions as F  # type: ignore
 
         _PARTITION_BY = (
             ["user_id", "subscription_channel"]
-            if event_type == "subscription"
+            if event == "subscription"
             else "message_id"
         )
         self.logger.debug(f"Will partition by: {_PARTITION_BY}")
 
         self.logger.debug("Joining given dataframe with cities coordinates")
 
-        sdf = dataframe.crossJoin(
-            cities_coords_sdf.select("city_id", "city_name", "city_lat", "city_lon")
+        sdf = df.crossJoin(
+            cities_coord_df.select("city_id", "city_name", "city_lat", "city_lon")
         )
-        sdf = self._compute_distance(
-            dataframe=sdf,
+        sdf = self._compute_distances(
+            df=sdf,
             coord_cols_prefix=("event", "city"),
         )
         self.logger.debug(
             "Collecting resulting dataframe of '_get_event_location' function"
         )
+
+        w = W().partitionBy(_PARTITION_BY).orderBy(F.asc("distance"))  # type: ignore
+
         sdf = (
             sdf.withColumn(
                 "city_dist_rnk",
-                row_number().over(
-                    Window().partitionBy(_PARTITION_BY).orderBy(asc("distance"))  # type: ignore
-                ),
+                F.row_number().over(w),
             )
-            .where(col("city_dist_rnk") == 1)
+            .where(F.col("city_dist_rnk") == 1)
             .drop(
                 "city_lat",
                 "city_lon",
@@ -256,20 +250,10 @@ class DatamartCollector(SparkRunner):
         |    418|   1115254|2022-04-25 ... |      Perth|      Perth|          4|2022-04-26 ... |
         +-------+----------+---------------+-----------+-----------+-----------+---------------+
         """
-        self.logger.debug(
-            "'_get_users_actual_data_df': Collecting dataframe of users actual data"
-        )
+        self.logger.debug("Collecting dataframe of users actual data")
 
-        from pyspark.sql import Window  # type: ignore
-        from pyspark.sql.functions import (  # type: ignore
-            col,
-            desc,
-            first,
-            from_utc_timestamp,
-            when,
-        )
-
-        self.logger.debug(f"Getting input data from: '{keeper.src_path}'")
+        from pyspark.sql import Window as W  # type: ignore
+        import pyspark.sql.functions as F  # type: ignore
 
         src_paths = self._get_src_paths(event_type="message", keeper=keeper)
         events_sdf = (
@@ -292,49 +276,51 @@ class DatamartCollector(SparkRunner):
             )
             .withColumn(
                 "msg_ts",
-                when(col("message_ts").isNotNull(), col("message_ts")).otherwise(
-                    col("datetime")
+                F.when(F.col("message_ts").isNotNull(), F.col("message_ts")).otherwise(
+                    F.col("datetime")
                 ),
             )
             .drop("message_ts", "datetime")
         )
+        cities_coords_sdf = self._get_cities_coords_df(keeper=keeper)
 
-        sdf = self._get_event_location(
-            dataframe=sdf,
-            event_type="message",
-            cities_coord_path=keeper.coords_path,  # type: ignore
+        sdf = self._add_event_location_to_df(
+            df=sdf,
+            cities_coord_df=cities_coords_sdf,
+            event="message",
         )
+        cities_coords_sdf.show(100)  # todo здесь ошибка
+        sdf.show(100)
+        # ошибка:
+        # [2023-06-09 08:04:16] {__main__:75} ERROR:  Column city_id#180 are ambiguous
+        # It's probably because you joined several Datasets together, and some of these Datasets are the same.
+        # This column points to one of the Datasets but Spark is unable to figure out which one
 
-        self.logger.debug("Getting cities coordinates dataframe from s3")
-        cities_coords_sdf = self.spark.read.parquet(keeper.coords_path)  # type: ignore
+        w = W().partitionBy("user_id").orderBy(F.desc("msg_ts"))
 
         sdf = (
             sdf.withColumn(
                 "act_city",
-                first(col="city_name", ignorenulls=True).over(
-                    Window().partitionBy("user_id").orderBy(desc("msg_ts"))
-                ),
+                F.first(col="city_name", ignorenulls=True).over(w),
             )
             .withColumn(
                 "act_city_id",
-                first(col="city_id", ignorenulls=True).over(
-                    Window().partitionBy("user_id").orderBy(desc("msg_ts"))
-                ),
+                F.first(col="city_id", ignorenulls=True).over(w),
             )
             .withColumn(
                 "last_msg_ts",
-                first(col="msg_ts", ignorenulls=True).over(
-                    Window().partitionBy("user_id").orderBy(desc("msg_ts"))
-                ),
+                F.first(col="msg_ts", ignorenulls=True).over(w),
             )
             .join(
                 cities_coords_sdf.select("city_id", "timezone"),
-                on=col("act_city_id") == cities_coords_sdf.city_id,
+                on=F.col("act_city_id") == cities_coords_sdf.city_id,
                 how="left",
             )
             .withColumn(
                 "local_time",
-                from_utc_timestamp(timestamp=col("last_msg_ts"), tz=col("timezone")),
+                F.from_utc_timestamp(
+                    timestamp=F.col("last_msg_ts"), tz=F.col("timezone")
+                ),
             )
             .select(
                 "user_id",
@@ -387,9 +373,11 @@ class DatamartCollector(SparkRunner):
         |    617|  Newcastle| Couldn't determine |2021-04-26 ... |           1|         [Newcastle]|
         +-------+-----------+--------------------+---------------+------------+--------------------+
         """
-        self.logger.info("Starting collecting 'users_demographic_dm'")
+        _DATAMART_NAME = "users_demographic_dm"
 
-        from pyspark.sql import Window  # type: ignore
+        self.logger.info(f"Starting collecting '{_DATAMART_NAME}'")
+
+        from pyspark.sql import Window as W  # type: ignore
         import pyspark.sql.functions as F  # type: ignore
         from pyspark.sql.utils import AnalysisException  # type: ignore
 
@@ -398,12 +386,13 @@ class DatamartCollector(SparkRunner):
         sdf = self._get_users_actual_data_df(keeper=keeper)
 
         self.logger.debug("Collecting travels data")
+
+        w = W().partitionBy("user_id").orderBy(F.asc("msg_ts"))
+
         travels_sdf = (
             sdf.withColumn(
                 "prev_city",
-                F.lag("city_name").over(
-                    Window().partitionBy("user_id").orderBy(F.asc("msg_ts"))
-                ),
+                F.lag("city_name").over(w),
             )
             .withColumn(
                 "visit_flg",
@@ -428,6 +417,9 @@ class DatamartCollector(SparkRunner):
         )
 
         self.logger.debug("Collecting users home city")
+
+        w = W().partitionBy("user_id").orderBy(F.asc("travel_ts"))
+
         home_city_sdf = (
             travels_sdf.withColumn(
                 "zipped_array", F.arrays_zip("travel_array", "travel_ts_array")
@@ -437,23 +429,17 @@ class DatamartCollector(SparkRunner):
             .withColumn("travel_ts", F.col("upzipped_array").getItem("travel_ts_array"))
             .withColumn(
                 "prev_travel_ts",
-                F.lag("travel_ts").over(
-                    Window().partitionBy("user_id").orderBy(F.asc("travel_ts"))
-                ),
+                F.lag("travel_ts").over(w),
             )
             .withColumn(
                 "prev_travel_city",
-                F.lag("travel_city").over(
-                    Window().partitionBy("user_id").orderBy(F.asc("travel_ts"))
-                ),
+                F.lag("travel_city").over(w),
             )
             .withColumn("diff", F.datediff("travel_ts", "prev_travel_ts"))
             .where(F.col("diff") > 27)
             .withColumn(
                 "rnk",
-                F.row_number().over(
-                    Window().partitionBy("user_id").orderBy(F.desc("travel_ts"))
-                ),
+                F.row_number().over(w),
             )
             .where(F.col("rnk") == 1)
             .select("user_id", F.col("prev_travel_city").alias("home_city"))
@@ -477,15 +463,17 @@ class DatamartCollector(SparkRunner):
 
         sdf = sdf.fillna(value="Couldn't determine", subset="home_city")
 
-        self.logger.info("Datamart 'users_demographic_dm' collected!")
+        self.logger.info(f"Datamart '{_DATAMART_NAME}' collected!")
+
+        sdf.show(10)
 
         self.logger.info("Writing results")
 
-        processed_dt = datetime.strptime(
+        _PROCESSED_DT = datetime.strptime(
             keeper.processed_dttm.replace("T", " "), r"%Y-%m-%d %H:%M:%S"  # type: ignore
         ).date()
 
-        OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
+        OUTPUT_PATH = f"{keeper.tgt_path}/{_DATAMART_NAME}/date={_PROCESSED_DT}"
 
         try:
             sdf.repartition(1).write.parquet(

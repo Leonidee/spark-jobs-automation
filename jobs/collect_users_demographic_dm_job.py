@@ -27,7 +27,7 @@ def main() -> None:
         PROCESSED_DTTM = str(sys.argv[6])
 
         if len(sys.argv) > 7:
-            raise KeyError("Too many arguments for job submitting! Expected 6")
+            raise IndexError("Too many arguments for job submitting! Expected 6")
 
         keeper = ArgsKeeper(
             date=DATE,
@@ -38,7 +38,7 @@ def main() -> None:
             processed_dttm=PROCESSED_DTTM,
         )
         if not keeper.coords_path:
-            raise KeyError(
+            raise S3ServiceError(
                 "We need 'coords_path' for this job!"
                 "Please specify one in given 'ArgsKeeper' instance"
             )
@@ -46,7 +46,7 @@ def main() -> None:
             executor_memory="3000m", executor_cores=1, max_executors_num=12
         )
 
-    except (IndexError, KeyError) as err:
+    except (IndexError, S3ServiceError) as err:
         logger.error(err)
         sys.exit(1)
 

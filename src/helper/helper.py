@@ -197,6 +197,7 @@ class SparkHelper:
         s3a://data-ice-lake-04/messager-data/analytics/geo-events/event_type=message/date=2022-04-26
         """
         self.logger.debug(f"Collecting src paths for '{event_type}' event type")
+        self.logger.debug(f"Source path: '{keeper.src_path}'")
 
         date = datetime.strptime(keeper.date, r"%Y-%m-%d").date()
 
