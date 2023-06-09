@@ -1,28 +1,23 @@
 import sys
 from pathlib import Path
 
-from pyspark.sql.utils import AnalysisException, CapturedException
+from pyspark.sql.utils import CapturedException
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.config import Config
 from src.logger import SparkLogger
-from src.spark import SparkRunner
-from src.keeper import ArgsKeeper, SparkConfigKeeper
 from src.spark import DatamartCollector
 from src.config import Config, EnableToGetConfig
 from src.environ import DotEnvError, EnvironNotSet
 from src.helper import S3ServiceError
 from src.keeper import ArgsKeeper, SparkConfigKeeper
-from src.logger import SparkLogger
-from src.spark import DatamartCollector
 
 config = Config(config_name="config.yaml")
 
-logger = SparkLogger(level=config.python_log_level).get_logger(logger_name=__name__)
+logger = SparkLogger().get_logger(logger_name=__name__)
 
 
-def main() -> None:
+def main() -> ...:
     try:
         DATE = str(sys.argv[1])
         DEPTH = int(sys.argv[2])
@@ -32,7 +27,7 @@ def main() -> None:
         PROCESSED_DTTM = str(sys.argv[6])
 
         if len(sys.argv) > 7:
-            raise KeyError("Too many arguments for job submitting! Expected 6")
+            raise IndexError("Too many arguments for job submitting! Expected 6")
 
         keeper = ArgsKeeper(
             date=DATE,
@@ -43,7 +38,7 @@ def main() -> None:
             processed_dttm=PROCESSED_DTTM,
         )
         if not keeper.coords_path:
-            raise KeyError(
+            raise S3ServiceError(
                 "We need 'coords_path' for this job!"
                 "Please specify one in given 'ArgsKeeper' instance"
             )
@@ -51,7 +46,7 @@ def main() -> None:
             executor_memory="3000m", executor_cores=1, max_executors_num=12
         )
 
-    except (KeyError, IndexError) as err:
+    except (IndexError, S3ServiceError) as err:
         logger.error(err)
         sys.exit(1)
 

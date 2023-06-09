@@ -17,7 +17,7 @@ config = Config("config.yaml")
 logger = SparkLogger().get_logger(logger_name=__name__)
 
 
-def main() -> None:
+def main() -> ...:
     try:
         DATE = str(sys.argv[1])
         DEPTH = int(sys.argv[2])

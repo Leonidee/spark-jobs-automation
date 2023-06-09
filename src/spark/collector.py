@@ -36,25 +36,28 @@ class DatamartCollector(SparkRunner):
         log4j_level: Literal[
             "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
         ] = "WARN",
-    ) -> None:
+    ) -> ...:
         return super().init_session(app_name, spark_conf, log4j_level)
 
-    def stop_session(self) -> None:
+    def stop_session(self) -> ...:
         return super().stop_session()
 
     def _compute_distances(
         self, df: pyspark.sql.DataFrame, coord_cols_prefix: Tuple[str, str]
     ) -> pyspark.sql.DataFrame:
-        """Compute distance between two point for each row of DataFrame
+        """Compute distance between two point for each row of DataFrame.
 
         ## Parameters
         `dataframe` : `pyspark.sql.DataFrame`
-        `coord_cols_prefix` : Tuple with prefix of columns names with coordinates. Must be exactly two.
+            DataFrame with data on wich needs to compute distances.
+        `coord_cols_prefix` : `Tuple[str, str]`
+            Tuple with prefix of columns names with coordinates. Must be exactly two.
 
-        For example `('city', 'event')`. This means that DataFrame contains columns city_lat, city_lon, event_lat and event_lon with the corresponding coordinates
+            For example `('city', 'event')`. This means that DataFrame contains columns city_lat, city_lon, event_lat and event_lon with the corresponding coordinates.
 
         ## Returns
-        `pyspark.sql.DataFrame` : DataFrame with additional column `distance` which contains distance between two columns
+        `pyspark.sql.DataFrame` :
+            DataFrame with additional column `distance` which contains distance between two columns.
 
         ## Examples
         >>> sdf.show()
@@ -112,8 +115,7 @@ class DatamartCollector(SparkRunner):
 
         self.logger.debug("Processing computations")
 
-        # Computations itself
-        # I splited them into parts
+        # Computations itself splitted into parts
         distance_lat = F.radians(F.col(lat_2)) - F.radians(F.col(lat_1))
         distance_lon = F.radians(F.col(lon_2)) - F.radians(F.col(lon_1))
 
@@ -129,6 +131,33 @@ class DatamartCollector(SparkRunner):
         return df.withColumn("distance", F.round(distance, 0))
 
     def _get_cities_coords_df(self, keeper: ArgsKeeper) -> pyspark.sql.DataFrame:
+        """Gets DataFrame with cities data.
+
+        ## Parameters
+        `keeper` : `ArgsKeeper`
+            Instance with arguments for the job.
+
+        ## Returns
+        `pyspark.sql.DataFrame`
+
+        ## Examples
+        >>> sdf = self._get_cities_coords_df
+        >>> sdf.show()
+        +-------+-----------+--------+--------+-------------------+
+        |city_id|  city_name|city_lat|city_lon|           timezone|
+        +-------+-----------+--------+--------+-------------------+
+        |      1|     Sydney| -33.865|151.2094|   Australia/Sydney|
+        |      2|  Melbourne|-37.8136|144.9631|Australia/Melbourne|
+        |      3|   Brisbane|-27.4678|153.0281| Australia/Brisbane|
+        |      4|      Perth|-31.9522|115.8589|    Australia/Perth|
+        |      5|   Adelaide|-34.9289|138.6011| Australia/Adelaide|
+        |      6| Gold Coast|-28.0167|   153.4| Australia/Brisbane|
+        |      7| Cranbourne|-38.0996|145.2834|Australia/Melbourne|
+        |      8|   Canberra|-35.2931|149.1269| Australia/Canberra|
+        |      9|  Newcastle|-32.9167|  151.75|   Australia/Sydney|
+        |     10| Wollongong|-34.4331|150.8831|   Australia/Sydney|
+        +-------+-----------+--------+--------+-------------------+
+        """
         self.logger.debug(
             f"Getting cities coordinates dataframe from S3 paths -> {keeper.coords_path}"
         )
@@ -143,12 +172,16 @@ class DatamartCollector(SparkRunner):
         """Takes a DataFrame containing events and their coordinates, calculates the distance to each city, and keeps only the closest cities.
 
         ## Parameters
-        `dataframe` : `pyspark.sql.DataFrame` with user events and its coordinates
-
-        `event_type` : Type of event. That needs to proper calculations
+        `df` : `pyspark.sql.DataFrame`
+            DataFrame with user events and its coordinates.
+        `cities_coord_df` : `pyspark.sql.DataFrame`
+            DataFrame with cities coordinates. One of returned by `_get_cities_coords_df` function.
+        `event` : `Literal[str]`
+            Type of event. That needs to proper calculations.
 
         ## Returns
-        `DataFrame` : `pyspark.sql.DataFrame` with additional columns city_id and city_name
+        `pyspark.sql.DataFrame` :
+            DataFrame with additional columns city_id and city_name.
 
         ## Examples
         >>> sdf.show()
@@ -163,7 +196,7 @@ class DatamartCollector(SparkRunner):
         |  20609|    749450|-34.301014598797465|149.51979221740035|2021-04-25 07:33:...|
         +-------+----------+-------------------+------------------+--------------------+
 
-        >>> result_sdf = self._get_event_location(dataframe=sdf, event_type="message")
+        >>> result_sdf = self._get_event_location(dataframe=sdf, cities_coord_df=coord_df, event_type="message")
         >>> result_sdf.show()
         +-------+----------+-------------------+------------------+--------------------+-------+-----------+
         |user_id|message_id|          event_lat|         event_lon|              msg_ts|city_id|  city_name|
@@ -221,16 +254,18 @@ class DatamartCollector(SparkRunner):
         return sdf
 
     def _get_users_actual_data_df(self, keeper: ArgsKeeper) -> pyspark.sql.DataFrame:
-        """Returns dataframe with user information based on sent messages.
+        """Returns DataFrame with user data based on sent messages.
 
         ## Parameters
-        `keeper` : `ArgsKeeper` with job arguments.
+        `keeper` : `ArgsKeeper`
+            Instance with arguments for the job.
 
         ## Returns
-        `DataFrame` : `pyspark.sql.DataFrame`
+        `pyspark.sql.DataFrame` :
+            DataFrame with user data
 
         ## Examples
-        >>> sdf = self._get_users_actual_data_dataframe(keeper=keeper)
+        >>> sdf = self._get_users_actual_data_df(keeper=keeper)
         >>> sdf.printSchema()
         root
         |-- user_id: long (nullable = true)
@@ -288,18 +323,13 @@ class DatamartCollector(SparkRunner):
             .drop("message_ts", "datetime")
         )
         cities_coords_sdf = self._get_cities_coords_df(keeper=keeper)
+        cities_coords_sdf.show(100)
 
         sdf = self._add_event_location_to_df(
             df=sdf,
             cities_coord_df=cities_coords_sdf,
             event="message",
         )
-        cities_coords_sdf.show(100)  # todo здесь ошибка
-        sdf.show(100)
-        # ошибка:
-        # [2023-06-09 08:04:16] {__main__:75} ERROR:  Column city_id#180 are ambiguous
-        # It's probably because you joined several Datasets together, and some of these Datasets are the same.
-        # This column points to one of the Datasets but Spark is unable to figure out which one
 
         self.logger.debug("Preparing users actual data results")
 
@@ -318,7 +348,11 @@ class DatamartCollector(SparkRunner):
                 "last_msg_ts",
                 F.first(col="msg_ts", ignorenulls=True).over(w),
             )
-            .join(
+            .drop("city_id")
+        )
+
+        return (
+            sdf.join(
                 cities_coords_sdf.select("city_id", "timezone"),
                 on=F.col("act_city_id") == cities_coords_sdf.city_id,
                 how="left",
@@ -340,18 +374,19 @@ class DatamartCollector(SparkRunner):
             )
         )
 
-        return sdf
-
-    def collect_users_demographic_dm(self, keeper: ArgsKeeper) -> None:
-        """Collect users info datamart and save results on s3
+    def collect_users_demographic_dm(self, keeper: ArgsKeeper) -> ...:
+        """Collects `users_demographic_dm` datamart.
 
         ## Parameters
-        `keeper` : `ArgsKeeper` with job arguments.
+        `keeper` : `ArgsKeeper`
+            Instance with arguments for the job.
 
         ## Examples
-        >>> spark = SparkRunner()
+        >>> spark = DatamartCollector()
         >>> spark.init_session(app_name="testing-app", spark_conf=conf, log4j_level="INFO")
-        >>> spark.collect_users_info_datamart(keeper=keeper)
+
+        Submit job:
+        >>> spark.collect_users_demographic_dm(keeper=keeper)
 
         Read saved results to see how it looks:
         >>> sdf = spark.read.parquet(keeper.tgt_path)
@@ -384,9 +419,18 @@ class DatamartCollector(SparkRunner):
 
         self.logger.info(f"Starting collecting '{_DATAMART_NAME}'")
 
-        import pyspark.sql.functions as F  # type: ignore
-        from pyspark.sql import Window as W  # type: ignore
-        from pyspark.sql.utils import AnalysisException  # type: ignore
+        import pyspark.sql.functions as F
+        from pyspark.sql import Window as W
+        from pyspark.sql.utils import AnalysisException
+        from pyspark.sql.types import (
+            ArrayType,
+            IntegerType,
+            LongType,
+            StructField,
+            StructType,
+            StringType,
+            TimestampType,
+        )
 
         _job_start = datetime.now()
 
@@ -470,9 +514,20 @@ class DatamartCollector(SparkRunner):
 
         sdf = sdf.fillna(value="Couldn't determine", subset="home_city")
 
-        self.logger.info(f"Datamart '{_DATAMART_NAME}' collected!")
+        _SCHEMA = StructType(
+            [
+                StructField("user_id", LongType(), nullable=False),
+                StructField("act_city", StringType(), nullable=False),
+                StructField("home_city", StringType(), nullable=False),
+                StructField("local_time", TimestampType(), nullable=False),
+                StructField("travel_count", IntegerType(), nullable=False),
+                StructField("travel_array", ArrayType(StringType()), nullable=False),
+            ]
+        )
 
-        sdf.show(10)
+        sdf = self.spark.createDataFrame(sdf.rdd, schema=_SCHEMA)
+
+        self.logger.info(f"Datamart '{_DATAMART_NAME}' collected!")
 
         self.logger.info("Writing results")
 
@@ -501,14 +556,16 @@ class DatamartCollector(SparkRunner):
         _job_end = datetime.now()
         self.logger.info(f"Job execution time: {_job_end - _job_start}")
 
-    def collect_events_total_cnt_agg_wk_mnth_dm(self, keeper: ArgsKeeper) -> None:
+    def collect_events_total_cnt_agg_wk_mnth_dm(self, keeper: ArgsKeeper) -> ...:
         """Collects `events_total_cnt_agg_wk_mnth_dm` datamart.
 
         ## Parameters
-        `keeper` : `ArgsKeeper` with job arguments.
+        `keeper` : `ArgsKeeper`
+            Instance with arguments for the job.
 
         ## Examples
-        >>> spark.collect_location_zone_agg_datamart(keeper=keeper) # will save results on s3
+        Sumit job:
+        >>> spark.collect_events_total_cnt_agg_wk_mnth_dm(keeper=keeper)
 
         Read saved results to see how it looks:
         >>> sdf = spark.read.parquet(keeper.tgt_path)
@@ -543,19 +600,25 @@ class DatamartCollector(SparkRunner):
         _DATAMART_NAME = "events_total_cnt_agg_wk_mnth_dm"
 
         self.logger.info(f"Staring collecting '{_DATAMART_NAME}'")
+        _job_start = datetime.now()
 
-        import pyspark.sql.functions as F  # type: ignore
-        from pyspark.sql import Window  # type: ignore
-        from pyspark.sql.types import (  # type: ignore
+        import pyspark.sql.functions as F
+        from pyspark.sql import Window as W
+        from pyspark.sql.types import (
             DateType,
             IntegerType,
             LongType,
             StructField,
             StructType,
         )
-        from pyspark.storagelevel import StorageLevel  # type: ignore
+        from pyspark.storagelevel import StorageLevel
+        from pyspark.sql.utils import AnalysisException
 
-        _job_start = datetime.now()
+        cities_coords_sdf = self._get_cities_coords_df(keeper=keeper).persist(
+            storageLevel=StorageLevel.MEMORY_ONLY
+        )
+
+        _W = W().partitionBy(F.col("zone_id"), F.col("month"))
 
         self.logger.debug("Collecing messages data")
 
@@ -567,14 +630,14 @@ class DatamartCollector(SparkRunner):
         )
 
         messages_sdf = (
-            messages_sdf.where(messages_sdf.message_from.isNotNull())
+            messages_sdf.where(F.col("message_from").isNotNull())
             .select(
-                messages_sdf.message_from.alias("user_id"),
-                messages_sdf.message_id,
-                messages_sdf.message_ts,
-                messages_sdf.datetime,
-                messages_sdf.lat.alias("event_lat"),
-                messages_sdf.lon.alias("event_lon"),
+                F.col("message_from").alias("user_id"),
+                F.col("message_id"),
+                F.col("message_ts"),
+                F.col("datetime"),
+                F.col("lat").alias("event_lat"),
+                F.col("lon").alias("event_lon"),
             )
             .withColumn(
                 "msg_ts",
@@ -586,10 +649,10 @@ class DatamartCollector(SparkRunner):
             .drop("datetime", "message_ts")
         )
 
-        messages_sdf = self._get_event_location(
-            dataframe=messages_sdf,
-            event_type="message",
-            cities_coord_path=keeper.coords_path,  # type: ignore
+        messages_sdf = self._add_event_location_to_df(
+            df=messages_sdf,
+            cities_coord_df=cities_coords_sdf,
+            event="message",
         )
 
         messages_sdf = (
@@ -600,9 +663,7 @@ class DatamartCollector(SparkRunner):
             .agg(F.count("message_id").alias("week_message"))
             .withColumn(
                 "month_message",
-                F.sum(F.col("week_message")).over(
-                    Window().partitionBy(F.col("zone_id"), F.col("month"))
-                ),
+                F.sum(F.col("week_message")).over(_W),
             )
             .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
@@ -619,20 +680,21 @@ class DatamartCollector(SparkRunner):
 
         reaction_sdf = (
             reaction_sdf.select(
-                reaction_sdf.datetime,
-                reaction_sdf.message_id,
-                reaction_sdf.reaction_from.alias("user_id"),
-                reaction_sdf.lat.alias("event_lat"),
-                reaction_sdf.lon.alias("event_lon"),
+                F.col("datetime"),
+                F.col("message_id"),
+                F.col("reaction_from").alias("user_id"),
+                F.col("lat").alias("event_lat"),
+                F.col("lon").alias("event_lon"),
             )
             .drop_duplicates(subset=["user_id", "message_id", "datetime"])
             .where(F.col("event_lat").isNotNull())
         )
-        reaction_sdf = self._get_event_location(
-            dataframe=reaction_sdf,
-            event_type="reaction",
-            cities_coord_path=keeper.coords_path,  # type: ignore
+        reaction_sdf = self._add_event_location_to_df(
+            df=reaction_sdf,
+            cities_coord_df=cities_coords_sdf,
+            event="reaction",
         )
+
         reaction_sdf = (
             reaction_sdf.withColumnRenamed("city_id", "zone_id")
             .where(F.col("event_lat").isNotNull())
@@ -642,9 +704,7 @@ class DatamartCollector(SparkRunner):
             .agg(F.count("message_id").alias("week_reaction"))
             .withColumn(
                 "month_reaction",
-                F.sum(F.col("week_reaction")).over(
-                    Window().partitionBy(F.col("zone_id"), F.col("month"))
-                ),
+                F.sum(F.col("week_reaction")).over(_W),
             )
             .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
@@ -657,16 +717,17 @@ class DatamartCollector(SparkRunner):
             .option("cacheMetadata", "true")
             .parquet(*src_paths)
         )
+        w = W().partitionBy("user_id").orderBy(F.asc("msg_ts"))
 
         registrations_sdf = (
-            registrations_sdf.where(registrations_sdf.message_from.isNotNull())
+            registrations_sdf.where(F.col("message_from").isNotNull())
             .select(
-                registrations_sdf.message_from.alias("user_id"),
-                registrations_sdf.message_id,
-                registrations_sdf.message_ts,
-                registrations_sdf.datetime,
-                registrations_sdf.lat.alias("event_lat"),
-                registrations_sdf.lon.alias("event_lon"),
+                F.col("message_from").alias("user_id"),
+                F.col("message_id"),
+                F.col("message_ts"),
+                F.col("datetime"),
+                F.col("lat").alias("event_lat"),
+                F.col("lon").alias("event_lon"),
             )
             .withColumn(
                 "msg_ts",
@@ -677,10 +738,7 @@ class DatamartCollector(SparkRunner):
             .drop_duplicates(subset=["user_id", "message_id", "msg_ts"])
             .drop("datetime", "message_ts")
             .withColumn(
-                "registration_ts",
-                F.first(col="msg_ts", ignorenulls=True).over(
-                    Window().partitionBy("user_id").orderBy(F.asc("msg_ts"))
-                ),
+                "registration_ts", F.first(col="msg_ts", ignorenulls=True).over(w)
             )
             .withColumn(
                 "is_reg",
@@ -691,10 +749,10 @@ class DatamartCollector(SparkRunner):
             .where(F.col("is_reg") == F.lit(1))
             .drop("is_reg", "registration_ts")
         )
-        registrations_sdf = self._get_event_location(
-            dataframe=registrations_sdf,
-            event_type="registration",
-            cities_coord_path=keeper.coords_path,  # type: ignore
+        registrations_sdf = self._add_event_location_to_df(
+            df=registrations_sdf,
+            cities_coord_df=cities_coords_sdf,
+            event="registration",
         )
 
         registrations_sdf = (
@@ -706,9 +764,7 @@ class DatamartCollector(SparkRunner):
             .agg(F.count("user_id").alias("week_user"))
             .withColumn(
                 "month_user",
-                F.sum(F.col("week_user")).over(
-                    Window().partitionBy(F.col("zone_id"), F.col("month"))
-                ),
+                F.sum(F.col("week_user")).over(_W),
             )
             .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
@@ -724,20 +780,20 @@ class DatamartCollector(SparkRunner):
 
         subscriptions_sdf = (
             subscriptions_sdf.select(
-                subscriptions_sdf.datetime,
-                subscriptions_sdf.subscription_channel,
-                subscriptions_sdf.user.alias("user_id"),
-                subscriptions_sdf.lat.alias("event_lat"),
-                subscriptions_sdf.lon.alias("event_lon"),
+                F.col("datetime"),
+                F.col("subscription_channel"),
+                F.col("user").alias("user_id"),
+                F.col("lat").alias("event_lat"),
+                F.col("lon").alias("event_lon"),
             )
             .drop_duplicates(subset=["user_id", "subscription_channel", "datetime"])
             .where(F.col("event_lat").isNotNull())
         )
 
-        subscriptions_sdf = self._get_event_location(
-            dataframe=subscriptions_sdf,
-            event_type="subscription",
-            cities_coord_path=keeper.coords_path,  # type: ignore
+        subscriptions_sdf = self._add_event_location_to_df(
+            df=subscriptions_sdf,
+            cities_coord_df=cities_coords_sdf,
+            event="subscription",
         )
         subscriptions_sdf = (
             subscriptions_sdf.withColumnRenamed("city_id", "zone_id")
@@ -747,10 +803,7 @@ class DatamartCollector(SparkRunner):
             .groupby("month", "week", "zone_id")
             .agg(F.count("user_id").alias("week_subscription"))
             .withColumn(
-                "month_subscription",
-                F.sum(F.col("week_subscription")).over(
-                    Window().partitionBy(F.col("zone_id"), F.col("month"))
-                ),
+                "month_subscription", F.sum(F.col("week_subscription")).over(_W)
             )
             .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
@@ -779,7 +832,13 @@ class DatamartCollector(SparkRunner):
             .dropna()
         )
 
-        for frame in (messages_sdf, reaction_sdf, registrations_sdf, subscriptions_sdf):
+        for frame in (
+            messages_sdf,
+            reaction_sdf,
+            registrations_sdf,
+            subscriptions_sdf,
+            cities_coords_sdf,
+        ):
             frame.unpersist()
 
         _SCHEMA = StructType(
@@ -801,36 +860,34 @@ class DatamartCollector(SparkRunner):
 
         self.logger.info(f"Datamart '{_DATAMART_NAME}' collected!")
 
-        sdf.show(100, False)  # TODO remove this
-        sdf.printSchema()
-        # self.logger.info("Writing results")
+        self.logger.info("Writing results")
 
-        # processed_dt = datetime.strptime(
-        #     keeper.processed_dttm.replace("T", " "), r"%Y-%m-%d %H:%M:%S"  # type: ignore
-        # ).date()
+        processed_dt = datetime.strptime(
+            keeper.processed_dttm.replace("T", " "), r"%Y-%m-%d %H:%M:%S"  # type: ignore
+        ).date()
 
-        # OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
+        OUTPUT_PATH = f"{keeper.tgt_path}/{_DATAMART_NAME}/date={processed_dt}"
 
-        # try:
-        #     sdf.repartition(1).write.parquet(
-        #         path=OUTPUT_PATH,
-        #         mode="errorifexists",
-        #     )
-        #     self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
+        try:
+            sdf.repartition(1).write.parquet(
+                path=OUTPUT_PATH,
+                mode="errorifexists",
+            )
+            self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
 
-        # except AnalysisException as err:
-        #     self.logger.warning(f"Notice that {str(err)}")
-        #     self.logger.info("Overwriting...")
-        #     sdf.repartition(1).write.parquet(
-        #         path=OUTPUT_PATH,
-        #         mode="overwrite",
-        #     )
-        #     self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
+        except AnalysisException as err:
+            self.logger.warning(f"Notice that {str(err)}")
+            self.logger.info("Overwriting...")
+            sdf.repartition(1).write.parquet(
+                path=OUTPUT_PATH,
+                mode="overwrite",
+            )
+            self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
 
         _job_end = datetime.now()
         self.logger.info(f"Job execution time: {_job_end - _job_start}")
 
-    def collect_add_to_friends_recommendations_dm(self, keeper: ArgsKeeper) -> None:
+    def collect_add_to_friends_recommendations_dm(self, keeper: ArgsKeeper) -> ...:
         """Collect friend recommendation datamart and save results on s3
 
         ## Parameters
@@ -854,20 +911,15 @@ class DatamartCollector(SparkRunner):
         |-- zone_id: integer (nullable = true)
         |-- local_time: timestamp (nullable = true)
         """
-        self.logger.info("Starting collecting friend recommendations datamart")
-        job_start = datetime.now()
 
-        from pyspark.sql import Window  # type: ignore
-        from pyspark.sql.functions import (  # type: ignore
-            array,
-            asc,
-            col,
-            explode,
-            first,
-            lit,
-            when,
-        )
-        from pyspark.storagelevel import StorageLevel  # type: ignore
+        _DATAMART_NAME = "add_to_friends_recommendations_dm"
+
+        self.logger.info(f"Staring collecting '{_DATAMART_NAME}'")
+        _job_start = datetime.now()
+
+        from pyspark.sql import Window as W
+        import pyspark.sql.functions as F
+        from pyspark.storagelevel import StorageLevel
 
         messages_src_paths = self._get_src_paths(keeper=keeper, event_type="message")
         real_contacts_sdf = (
@@ -882,18 +934,18 @@ class DatamartCollector(SparkRunner):
         real_contacts_sdf = (
             real_contacts_sdf.where(real_contacts_sdf.message_to.isNotNull())
             .select(
-                real_contacts_sdf.message_from,
-                real_contacts_sdf.message_to,
+                F.col("message_from"),
+                F.col("message_to"),
             )
             .withColumn(
                 "user_id",
-                explode(array(col("message_from"), col("message_to"))),
+                F.explode(F.array(F.col("message_from"), F.col("message_to"))),
             )
             .withColumn(
                 "contact_id",
-                when(
-                    col("user_id") == col("message_from"), col("message_to")
-                ).otherwise(col("message_from")),
+                F.when(
+                    F.col("user_id") == F.col("message_from"), F.col("message_to")
+                ).otherwise(F.col("message_from")),
             )
             .select("user_id", "contact_id")
             .distinct()
@@ -901,7 +953,7 @@ class DatamartCollector(SparkRunner):
             # .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
 
-        self.logger.debug("Collecting all users with subscriptions dataframe")
+        self.logger.debug("Collecting all users with subscriptions")
         #  все пользователи подписавшиеся на один из каналов (любой)
         subscription_src_paths = self._get_src_paths(
             keeper=keeper, event_type="subscription"
@@ -913,16 +965,16 @@ class DatamartCollector(SparkRunner):
         )
 
         subs_sdf = (
-            subs_sdf.where(subs_sdf.subscription_channel.isNotNull())
-            .where(subs_sdf.user.isNotNull())
+            subs_sdf.where(F.col("subscription_channel").isNotNull())
+            .where(F.col("user").isNotNull())
             .select(
-                subs_sdf.subscription_channel,
-                subs_sdf.user.alias("user_id"),
+                F.col("subscription_channel"),
+                F.col("user").alias("user_id"),
             )
             .drop_duplicates(subset=["user_id", "subscription_channel"])
         )
 
-        self.logger.debug("Collecting users with same subsctiptions only dataframe")
+        self.logger.debug("Collecting users with the same subsctiptions only")
         # пользователи подписанные на один и тот же канал
         subs_sdf = (
             subs_sdf.withColumnRenamed("user_id", "left_user")
@@ -931,7 +983,7 @@ class DatamartCollector(SparkRunner):
                 on="subscription_channel",
                 how="cross",
             )
-            .where(col("left_user") != col("right_user"))
+            .where(F.col("left_user") != F.col("right_user"))
             # .repartition(92, "left_user", "right_user")
             # .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
@@ -955,27 +1007,27 @@ class DatamartCollector(SparkRunner):
             .parquet(*messages_src_paths)
         )
         messages_sdf = (
-            messages_sdf.where(messages_sdf.message_from.isNotNull())
+            messages_sdf.where(F.col("message_from").isNotNull())
             .select(
-                messages_sdf.message_from.alias("user_id"),
-                messages_sdf.message_ts,
-                messages_sdf.datetime,
-                messages_sdf.lat.alias("event_lat"),
-                messages_sdf.lon.alias("event_lon"),
+                F.col("message_from").alias("user_id"),
+                F.col("message_ts"),
+                F.col("datetime"),
+                F.col("lat").alias("event_lat"),
+                F.col("lon").alias("event_lon"),
             )
             .withColumn(
                 "msg_ts",
-                when(col("message_ts").isNotNull(), col("message_ts")).otherwise(
-                    col("datetime")
+                F.when(F.col("message_ts").isNotNull(), F.col("message_ts")).otherwise(
+                    F.col("datetime")
                 ),
             )
             .withColumn(
                 "last_msg_ts",
-                first(col="msg_ts", ignorenulls=True).over(
-                    Window().partitionBy("user_id").orderBy(asc("msg_ts"))
+                F.first(col="msg_ts", ignorenulls=True).over(
+                    Window().partitionBy("user_id").orderBy(F.asc("msg_ts"))
                 ),
             )
-            .where(col("msg_ts") == col("last_msg_ts"))
+            .where(F.col("msg_ts") == F.col("last_msg_ts"))
             .select("user_id", "event_lat", "event_lon")
             .distinct()
             # .repartitionByRange(92, "user_id")
@@ -987,9 +1039,9 @@ class DatamartCollector(SparkRunner):
         users_for_rec = (
             users_for_rec.join(
                 messages_sdf.select(
-                    col("user_id"),
-                    col("event_lat").alias("left_user_lat"),
-                    col("event_lon").alias("left_user_lon"),
+                    F.col("user_id"),
+                    F.col("event_lat").alias("left_user_lat"),
+                    F.col("event_lon").alias("left_user_lon"),
                 ),
                 how="left",
                 on=[users_for_rec.left_user == messages_sdf.user_id],
@@ -997,21 +1049,21 @@ class DatamartCollector(SparkRunner):
             .drop("user_id")
             .join(
                 messages_sdf.select(
-                    col("user_id"),
-                    col("event_lat").alias("right_user_lat"),
-                    col("event_lon").alias("right_user_lon"),
+                    F.col("user_id"),
+                    F.col("event_lat").alias("right_user_lat"),
+                    F.col("event_lon").alias("right_user_lon"),
                 ),
                 how="left",
                 on=[users_for_rec.right_user == messages_sdf.user_id],
             )
             .drop("user_id")
-            .where(col("left_user_lat").isNotNull())
-            .where(col("right_user_lat").isNotNull())
+            .where(F.col("left_user_lat").isNotNull())
+            .where(F.col("right_user_lat").isNotNull())
             # .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
 
-        sdf = self._compute_distance(
-            dataframe=users_for_rec, coord_cols_prefix=("left_user", "right_user")
+        sdf = self._compute_distances(
+            df=users_for_rec, coord_cols_prefix=("left_user", "right_user")
         )
 
         users_info_sdf = self._get_users_actual_data_df(keeper=keeper)
@@ -1035,14 +1087,15 @@ class DatamartCollector(SparkRunner):
                 "left_user",
                 "right_user",
                 "processed_dttm",
-                col("act_city_id").alias("zone_id"),
+                F.col("act_city_id").alias("zone_id"),
                 "local_time",
             )
         )
 
-        self.logger.info("Datamart collected")
+        self.logger.info(f"Datamart '{_DATAMART_NAME}' collected!")
 
         self.logger.info("Writing results")
+
 
         sdf.show(200, False)
 
@@ -1069,5 +1122,5 @@ class DatamartCollector(SparkRunner):
         #     )
         #     self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
 
-        job_end = datetime.now()
-        self.logger.info(f"Job execution time: {job_end - job_start}")
+        _job_end = datetime.now()
+        self.logger.info(f"Job execution time: {_job_end - _job_start}")

@@ -1,4 +1,4 @@
-{{!Python Docstrings Template without Types for Args for project spark-jobs-automation}}
+{{!Python Docstrings Template for spark-jobs-automation Project}}
 {{summaryPlaceholder}}
 
 {{extendedSummaryPlaceholder}}
@@ -6,17 +6,20 @@
 
 ## Parameters
 {{#args}}
-`{{var}}` : {{descriptionPlaceholder}}
+`{{var}}` : `{{typePlaceholder}}`
+    {{descriptionPlaceholder}}
 {{/args}}
 {{#kwargs}}
-`{{var}}` : {{descriptionPlaceholder}}, by default {{&default}}
+`{{var}}` : `{{typePlaceholder}}`
+    {{descriptionPlaceholder}}, by default '{{&default}}'
 {{/kwargs}}
 {{/parametersExist}}
 {{#returnsExist}}
 
 ## Returns
 {{#returns}}
-`{{typePlaceholder}}` : {{descriptionPlaceholder}}
+`{{typePlaceholder}}` :
+    {{descriptionPlaceholder}}
 {{/returns}}
 {{/returnsExist}}
 {{#yieldsExist}}
@@ -30,6 +33,7 @@
 
 ## Raises
 {{#exceptions}}
-`{{type}}` : {{descriptionPlaceholder}}
+`{{type}}` :
+    {{descriptionPlaceholder}}
 {{/exceptions}}
 {{/exceptionsExist}}

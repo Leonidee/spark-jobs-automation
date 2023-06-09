@@ -23,36 +23,20 @@ from src.spark import SparkRunner
 logger = SparkLogger().get_logger(logger_name=__name__)
 
 
-class A:
-    __slots__ = "a", "b"
-
-    def __init__(self, a, b) -> None:
-        self.a = a
-        self.b = b
+from typing import Tuple
 
 
-class B(A):
-    __slots__ = "c"
+def main(one: str, two: Tuple[str, str]) -> Tuple[str, ...]:
+    if one:
+        if two:
+            print("Hi!")
+    if not one:
+        raise ValueError("error!")
+    if not two:
+        raise KeyError("...")
 
-    def __init__(self, a, b, c) -> None:
-        super().__init__(a, b)
-        self.c = c
-
-    def get_slots(self):
-        for _ in self.__slots__:
-            print(_)
-
-
-def main():
-    b = B(a="..", b="..", c="some")
-
-    b.a = "new"
-    b.new = 1
-
-    b.get_slots()
-
-    print(b.new)
+    return ()
 
 
 if __name__ == "__main__":
-    main()
+    ...

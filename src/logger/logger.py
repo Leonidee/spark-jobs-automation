@@ -66,9 +66,9 @@ class SparkLogger(Logger):
             field_styles=dict(
                 asctime=dict(color="magenta"),
                 name=dict(color="cyan"),
-                funcName=dict(color="magenta"),
+                funcName=dict(color="white"),
                 levelname=dict(color="yellow", bold=False, bright=True),  # type: ignore
-                lineno=dict(color="white"),
+                lineno=dict(color="cyan", bright=True),
             ),
         )
 

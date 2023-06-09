@@ -24,7 +24,7 @@ class SparkRuntimeError(Exception):
 
 
 class SparkRunner(SparkHelper):
-    """Data processor and datamarts collector class.
+    """Main class for Spark running.
 
     ## Examples
     Initialize `SparkRunner` class object:
@@ -33,10 +33,7 @@ class SparkRunner(SparkHelper):
     Start session:
     >>> spark.init_session(app_name="test-app", spark_conf=conf, log4j_level="INFO")
 
-    And now execute chosen job:
-    >>> spark.collect_friend_recommendation_datamart(keeper=keeper)
-
-    Don't forget to stop session:
+    Stop active session:
     >>> spark.stop_session()
     """
 
@@ -54,13 +51,16 @@ class SparkRunner(SparkHelper):
         log4j_level: Literal[
             "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
         ] = "WARN",
-    ) -> None:
-        """Configure and initialize Spark Session
+    ) -> ...:
+        """Configure and initialize Spark Session.
 
         ## Parameters
-        `app_name` : Name of Spark application
-        `spark_conf` : `SparkConfigKeeper` object with Spark configuration properties
-        `log4j_level` : Spark Context Java logging level, by default "WARN"
+        `app_name` : `str`
+            Name of Spark application.
+        `spark_conf` : `SparkConfigKeeper`
+            Spark configuration properties.
+        `log4j_level` : `Literal[str]`
+            Spark Context Java logging level, by default 'WARN'
         """
         self.logger.info("Initializing Spark session")
 
@@ -93,8 +93,8 @@ class SparkRunner(SparkHelper):
 
         self.logger.info(f"Log4j level: '{log4j_level}'")
 
-    def stop_session(self) -> None:
-        """Stop active Spark Session"""
+    def stop_session(self) -> ...:
+        """Stops active Spark Session"""
 
         self.logger.info("Stopping active session")
 
