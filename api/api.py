@@ -19,7 +19,7 @@ logger = SparkLogger().get_logger(logger_name=__name__)
 
 
 @app.post("/submit_collect_users_demographic_dm_job")
-def submit_collect_users_demographic_dm_job(keeper: ArgsKeeper) -> ...:
+def submit_collect_users_demographic_dm_job(keeper: ArgsKeeper):
     CMD = [
         SPARK_SUBMIT_EXEC,
         f"{PROJECT_PATH}/jobs/collect_users_demographic_dm_job.py",
@@ -36,7 +36,7 @@ def submit_collect_users_demographic_dm_job(keeper: ArgsKeeper) -> ...:
 
 
 @app.post("/submit_collect_events_total_cnt_agg_wk_mnth_dm_job")
-def submit_collect_events_total_cnt_agg_wk_mnth_dm_job(keeper: ArgsKeeper) -> ...:
+def submit_collect_events_total_cnt_agg_wk_mnth_dm_job(keeper: ArgsKeeper):
     CMD = [
         SPARK_SUBMIT_EXEC,
         f"{PROJECT_PATH}/jobs/collect_events_total_cnt_agg_wk_mnth_dm_job.py",
@@ -53,7 +53,7 @@ def submit_collect_events_total_cnt_agg_wk_mnth_dm_job(keeper: ArgsKeeper) -> ..
 
 
 @app.post("/submit_collect_add_to_friends_recommendations_dm_job")
-def submit_collect_add_to_friends_recommendations_dm_job(keeper: ArgsKeeper) -> ...:
+def submit_collect_add_to_friends_recommendations_dm_job(keeper: ArgsKeeper):
     CMD = [
         SPARK_SUBMIT_EXEC,
         f"{PROJECT_PATH}/jobs/collect_add_to_friends_recommendations_dm_job.py",
