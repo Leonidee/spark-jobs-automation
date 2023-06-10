@@ -131,7 +131,7 @@ class DatamartCollector(SparkRunner):
         return df.withColumn("distance", F.round(distance, 0))
 
     def _get_cities_coords_df(self, keeper: ArgsKeeper) -> pyspark.sql.DataFrame:
-        """Gets DataFrame with cities data.
+        """Gets DataFrame with cities coordinates and other data.
 
         ## Parameters
         `keeper` : `ArgsKeeper`
@@ -323,7 +323,6 @@ class DatamartCollector(SparkRunner):
             .drop("message_ts", "datetime")
         )
         cities_coords_sdf = self._get_cities_coords_df(keeper=keeper)
-        cities_coords_sdf.show(100)
 
         sdf = self._add_event_location_to_df(
             df=sdf,
@@ -564,7 +563,10 @@ class DatamartCollector(SparkRunner):
             Instance with arguments for the job.
 
         ## Examples
-        Sumit job:
+        >>> spark = DatamartCollector()
+        >>> spark.init_session(app_name="testing-app", spark_conf=conf, log4j_level="INFO")
+
+        Submit job:
         >>> spark.collect_events_total_cnt_agg_wk_mnth_dm(keeper=keeper)
 
         Read saved results to see how it looks:
@@ -888,28 +890,38 @@ class DatamartCollector(SparkRunner):
         self.logger.info(f"Job execution time: {_job_end - _job_start}")
 
     def collect_add_to_friends_recommendations_dm(self, keeper: ArgsKeeper) -> ...:
-        """Collect friend recommendation datamart and save results on s3
+        """Collects `add_to_friends_recommendations_dm` datamart.
 
         ## Parameters
-        `keeper` : Arguments keeper object
+        `keeper` : `ArgsKeeper`
+            Instance with arguments for the job.
 
         ## Examples
-        Lets initialize class object and start session:
-        >>> spark = SparkRunner()
-        >>> spark.init_session(app_name="testing-app", log4j_level="INFO")
+        >>> spark = DatamartCollector()
+        >>> spark.init_session(app_name="testing-app", spark_conf=conf, log4j_level="INFO")
 
-        Now we can execute class method that collects datamart:
-        >>> spark.collect_friend_recommendation_datamart(keeper=keeper)
+        Submit the job:
+        >>> spark.collect_add_to_friends_recommendations_dm(keeper=keeper)
 
-        And after that read saved results to see how it looks:
+        Read saved results to see how it looks:
         >>> sdf = spark.read.parquet(keeper.tgt_path)
+        >>> sdf.show(100)
+        +-------+------------------+-------------------+-------+-------------------+
+        |user_id|rec_to_add_user_id|processed_dttm     |zone_id|local_time         |
+        +-------+------------------+-------------------+-------+-------------------+
+        |19741  |149989            |2023-05-22 12:03:25|10     |2022-04-17 19:52:54|
+        |39022  |110529            |2023-05-22 12:03:25|2      |2022-04-23 19:35:19|
+                                    ...
+        |100241 |110765            |2023-05-22 12:03:25|3      |2022-04-17 22:38:26|
+        |103047 |136494            |2023-05-22 12:03:25|9      |2022-04-27 00:21:41|
+        +-------+------------------+-------------------+-------+-------------------+
         >>> sdf.printSchema()
         root
-        |-- left_user: string (nullable = true)
-        |-- right_user: string (nullable = true)
-        |-- processed_dttm: string (nullable = true)
-        |-- zone_id: integer (nullable = true)
-        |-- local_time: timestamp (nullable = true)
+        |-- user_id: long (nullable = false)
+        |-- rec_to_add_user_id: long (nullable = false)
+        |-- processed_dttm: timestamp (nullable = false)
+        |-- zone_id: integer (nullable = false)
+        |-- local_time: timestamp (nullable = false)
         """
 
         _DATAMART_NAME = "add_to_friends_recommendations_dm"
@@ -919,7 +931,14 @@ class DatamartCollector(SparkRunner):
 
         from pyspark.sql import Window as W
         import pyspark.sql.functions as F
-        from pyspark.storagelevel import StorageLevel
+        from pyspark.sql.utils import AnalysisException
+        from pyspark.sql.types import (
+            StructType,
+            StructField,
+            IntegerType,
+            TimestampType,
+            LongType,
+        )
 
         messages_src_paths = self._get_src_paths(keeper=keeper, event_type="message")
         real_contacts_sdf = (
@@ -932,7 +951,7 @@ class DatamartCollector(SparkRunner):
 
         # реальные контакты
         real_contacts_sdf = (
-            real_contacts_sdf.where(real_contacts_sdf.message_to.isNotNull())
+            real_contacts_sdf.where(F.col("message_to").isNotNull())
             .select(
                 F.col("message_from"),
                 F.col("message_to"),
@@ -949,8 +968,6 @@ class DatamartCollector(SparkRunner):
             )
             .select("user_id", "contact_id")
             .distinct()
-            # .repartition(92, "user_id", "contact_id")
-            # .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
 
         self.logger.debug("Collecting all users with subscriptions")
@@ -984,8 +1001,6 @@ class DatamartCollector(SparkRunner):
                 how="cross",
             )
             .where(F.col("left_user") != F.col("right_user"))
-            # .repartition(92, "left_user", "right_user")
-            # .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
 
         self.logger.debug("Excluding real contacts")
@@ -1006,6 +1021,8 @@ class DatamartCollector(SparkRunner):
             .option("cacheMetadata", "true")
             .parquet(*messages_src_paths)
         )
+        w = W().partitionBy("user_id").orderBy(F.asc("msg_ts"))
+
         messages_sdf = (
             messages_sdf.where(F.col("message_from").isNotNull())
             .select(
@@ -1023,15 +1040,11 @@ class DatamartCollector(SparkRunner):
             )
             .withColumn(
                 "last_msg_ts",
-                F.first(col="msg_ts", ignorenulls=True).over(
-                    Window().partitionBy("user_id").orderBy(F.asc("msg_ts"))
-                ),
+                F.first(col="msg_ts", ignorenulls=True).over(w),
             )
             .where(F.col("msg_ts") == F.col("last_msg_ts"))
             .select("user_id", "event_lat", "event_lon")
             .distinct()
-            # .repartitionByRange(92, "user_id")
-            # .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
 
         self.logger.debug("Collecting coordinates for potential recomendations users")
@@ -1059,7 +1072,6 @@ class DatamartCollector(SparkRunner):
             .drop("user_id")
             .where(F.col("left_user_lat").isNotNull())
             .where(F.col("right_user_lat").isNotNull())
-            # .persist(storageLevel=StorageLevel.MEMORY_ONLY)
         )
 
         sdf = self._compute_distances(
@@ -1082,45 +1094,53 @@ class DatamartCollector(SparkRunner):
                 on=[sdf.left_user == users_info_sdf.user_id],
                 how="left",
             )
-            .withColumn("processed_dttm", lit(keeper.processed_dttm.replace("T", " ")))  # type: ignore
+            .withColumn("processed_dttm", F.lit(keeper.processed_dttm.replace("T", " ")))  # type: ignore
             .select(
-                "left_user",
-                "right_user",
-                "processed_dttm",
+                F.col("left_user").cast(LongType()).alias("user_id"),
+                F.col("right_user").cast(LongType()).alias("rec_to_add_user_id"),
+                F.col("processed_dttm").cast(TimestampType()),
                 F.col("act_city_id").alias("zone_id"),
-                "local_time",
+                F.col("local_time").cast(TimestampType()),
             )
         )
+
+        _SCHEMA = StructType(
+            [
+                StructField("user_id", LongType(), nullable=False),
+                StructField("rec_to_add_user_id", LongType(), nullable=False),
+                StructField("processed_dttm", TimestampType(), nullable=False),
+                StructField("zone_id", IntegerType(), nullable=False),
+                StructField("local_time", TimestampType(), nullable=False),
+            ]
+        )
+        sdf = self.spark.createDataFrame(data=sdf.rdd, schema=_SCHEMA)
 
         self.logger.info(f"Datamart '{_DATAMART_NAME}' collected!")
 
         self.logger.info("Writing results")
 
+        processed_dt = datetime.strptime(
+            keeper.processed_dttm.replace("T", " "), r"%Y-%m-%d %H:%M:%S"  # type: ignore
+        ).date()
 
-        sdf.show(200, False)
+        OUTPUT_PATH = f"{keeper.tgt_path}/{_DATAMART_NAME}/date={processed_dt}"
 
-        sdf.printSchema()
+        try:
+            sdf.repartition(1).write.parquet(
+                path=OUTPUT_PATH,
+                mode="errorifexists",
+            )
+            self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
 
-        # processed_dt = datetime.strptime(
-        #     keeper.processed_dttm.replace("T", " "), "%Y-%m-%d %H:%M:%S.%f"
-        # ).date()
-        # OUTPUT_PATH = f"{keeper.tgt_path}/date={processed_dt}"
-        # try:
-        #     sdf.repartition(1).write.parquet(
-        #         path=OUTPUT_PATH,
-        #         mode="errorifexists",
-        #     )
-        #     self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
-        # except Exception:
-        #     self.logger.warning(
-        #         "Notice that target path is already exists and will be overwritten!"
-        #     )
-        #     self.logger.info("Overwriting...")
-        #     sdf.repartition(1).write.parquet(
-        #         path=OUTPUT_PATH,
-        #         mode="overwrite",
-        #     )
-        #     self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
+        except AnalysisException as err:
+            self.logger.warning(f"Notice that {str(err)}")
+            self.logger.info("Overwriting...")
+
+            sdf.repartition(1).write.parquet(
+                path=OUTPUT_PATH,
+                mode="overwrite",
+            )
+            self.logger.info(f"Done! Results -> {OUTPUT_PATH}")
 
         _job_end = datetime.now()
         self.logger.info(f"Job execution time: {_job_end - _job_start}")

@@ -1,14 +1,17 @@
 import sys
 from pathlib import Path
 from typing import Literal
-from src.keeper import SparkConfigKeeper
+from datetime import datetime
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.spark.runner import SparkRunner
 from src.logger import SparkLogger
+from src.keeper import SparkConfigKeeper
 
 
 class DataMover(SparkRunner):
+    __slots__ = "logger"
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -21,21 +24,23 @@ class DataMover(SparkRunner):
         log4j_level: Literal[
             "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
         ] = "WARN",
-    ) -> None:
+    ) -> ...:
         return super().init_session(app_name, spark_conf, log4j_level)
 
-    def stop_session(self) -> None:
+    def stop_session(self) -> ...:
         return super().stop_session()
 
-    def _move_data(self, source_path: str, tgt_path: str):
+    def _move_data(self, source_path: str, tgt_path: str) -> ...:
         "Moves data between DWH layers. This method not for public calling"
 
-        job_start = datetime.now()
+        _job_start = datetime.now()
+
+        import pyspark.sql.functions as F
 
         df = (
             self.spark.read.option("mergeSchema", "true")
             .option("cacheMetadata", "true")
-            .parquet("s3a://data-ice-lake-04/messager-data/analytics/geo-events")
+            .parquet(source_path)
         )
         df = df.repartition(56)
 
@@ -44,7 +49,7 @@ class DataMover(SparkRunner):
             .withColumn("channel_id", df.event.channel_id)
             .withColumn(
                 "datetime",
-                to_timestamp(col=df.event.datetime, format="yyyy-MM-dd HH:mm:ss"),
+                F.to_timestamp(col=df.event.datetime, format="yyyy-MM-dd HH:mm:ss"),
             )
             .withColumn("media_type", df.event.media.media_type)
             .withColumn("media_src", df.event.media.src)
@@ -56,8 +61,8 @@ class DataMover(SparkRunner):
             .withColumn("message_to", df.event.message_to)
             .withColumn(
                 "message_ts",
-                to_timestamp(
-                    split(str=df.event.message_ts, pattern="\.").getItem(0),
+                F.to_timestamp(
+                    F.split(str=df.event.message_ts, pattern=r"\.").getItem(0),
                     format="yyyy-MM-dd HH:mm:ss",
                 ),
             )
@@ -68,7 +73,7 @@ class DataMover(SparkRunner):
             .withColumn("tags", df.event.tags)
             .withColumn("user", df.event.user)
             .withColumn("event_type", df.event_type)
-            .withColumn("date", date_format("datetime", "yyyy-MM-dd"))
+            .withColumn("date", F.date_format("datetime", "yyyy-MM-dd"))
             .withColumn("lat", df.lat)
             .withColumn("lon", df.lon)
             .select(
@@ -97,12 +102,12 @@ class DataMover(SparkRunner):
             )
         )
 
-        tgt_path = "s3a://data-ice-lake-05/messager-data/analytics/geo-events"
         df.repartition(1).write.parquet(
             path=tgt_path,
             mode="overwrite",
             partitionBy=["event_type", "date"],
             compression="gzip",
         )
-        job_end = datetime.now()
-        self.logger.info(f"Job execution time: {job_end - job_start}")
+        _job_end = datetime.now()
+
+        self.logger.info(f"Job execution time: {_job_end - _job_start}")

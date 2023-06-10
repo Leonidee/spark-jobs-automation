@@ -39,8 +39,7 @@ def main() -> ...:
         )
         if not keeper.coords_path:
             raise S3ServiceError(
-                "We need 'coords_path' for this job!"
-                "Please specify one in given 'ArgsKeeper' instance"
+                "We need 'coords_path' for this job! Please specify one in given 'ArgsKeeper' instance"
             )
         spark_conf = SparkConfigKeeper(
             executor_memory="3000m", executor_cores=1, max_executors_num=12
