@@ -87,7 +87,7 @@ class SparkSubmitter(BaseRequestHandler):
 
         self._API_BASE_URL = os.getenv(_REQUIRED_VAR)
 
-    def submit_job(self, job: Literal["users_info_datamart_job", "location_zone_agg_datamart_job", "friend_recommendation_datamart_job"], keeper: ArgsKeeper) -> bool:  # type: ignore
+    def submit_job(self, job: Literal["collect_users_demographic_dm_job", "location_zone_agg_datamart_job", "friend_recommendation_datamart_job"], keeper: ArgsKeeper) -> bool:  # type: ignore
         """Sends request to API to submit Spark job in Hadoop Cluster.
 
         ## Parameters
@@ -141,10 +141,10 @@ class SparkSubmitter(BaseRequestHandler):
                 self.logger.debug(f"{response=}")
 
             except JSONDecodeError as e:
-                raise UnableToGetResponse(f"{e}. Posible failed to submit job.")
+                raise UnableToGetResponse(f"{str(e)}. Posible failed to submit job.")
 
-            if response.get("returncode") == 0:
-                self.logger.info(f"{job} job was submitted successfully!")
+            if response.get("returncode") == 2:
+                self.logger.info(f"'{job}' job was submitted successfully!")
 
                 self.logger.debug(f"Job stdout:\n{response.get('stdout')}")
                 self.logger.debug(f"Job stderr:\n{response.get('stderr')}")
@@ -159,7 +159,7 @@ class SparkSubmitter(BaseRequestHandler):
                 )
             else:
                 raise UnableToSubmitJob(
-                    f"Unable to submit '{job}' job. API returned code -> {response}"
+                    f"Unable to submit '{job}' job. API returned code -> {response.get('returncode')}"
                 )
         else:
             raise UnableToGetResponse(
