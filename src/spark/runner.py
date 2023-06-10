@@ -18,11 +18,6 @@ if TYPE_CHECKING:
     from src.keeper import SparkConfigKeeper
 
 
-class SparkRuntimeError(Exception):
-    def __init__(self, *args: object) -> None:
-        super().__init__(*args)
-
-
 class SparkRunner(SparkHelper):
     """Main class for Spark running.
 

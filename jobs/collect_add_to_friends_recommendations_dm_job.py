@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-from pyspark.sql.utils import CapturedException  # type: ignore
+from pyspark.sql.utils import CapturedException
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
@@ -10,7 +10,7 @@ from src.environ import DotEnvError, EnvironNotSet
 from src.helper import S3ServiceError
 from src.keeper import ArgsKeeper, SparkConfigKeeper
 from src.logger import SparkLogger
-from src.spark import SparkRunner
+from src.spark import DatamartCollector
 
 
 config = Config("config.yaml")
@@ -18,7 +18,7 @@ config = Config("config.yaml")
 logger = SparkLogger().get_logger(logger_name=__name__)
 
 
-def main() -> None:
+def main() -> ...:
     try:
         DATE = str(sys.argv[1])
         DEPTH = int(sys.argv[2])
@@ -28,7 +28,7 @@ def main() -> None:
         PROCESSED_DTTM = str(sys.argv[6])
 
         if len(sys.argv) > 7:
-            raise KeyError("Too many arguments for job submitting! Expected 6")
+            raise IndexError("Too many arguments for job submitting! Expected 6")
 
         keeper = ArgsKeeper(
             date=DATE,
@@ -38,41 +38,47 @@ def main() -> None:
             coords_path=COORDS_PATH,
             processed_dttm=PROCESSED_DTTM,
         )
-        conf = SparkConfigKeeper(
-            executor_memory="3000m", executor_cores=1, max_executors_num=12
-        )
 
-    except (IndexError, KeyError) as e:
-        logger.error(e)
+        if not keeper.coords_path:
+            raise S3ServiceError(
+                "We need 'coords_path' for this job! Please specify one in given 'ArgsKeeper' instance"
+            )
+
+    except (IndexError, S3ServiceError) as err:
+        logger.error(err)
         sys.exit(1)
 
+    conf = SparkConfigKeeper(
+        executor_memory="3000m", executor_cores=1, max_executors_num=12
+    )
+
     try:
-        spark = SparkRunner()
+        collector = DatamartCollector()
     except (DotEnvError, EnvironNotSet, EnableToGetConfig) as err:
         logger.error(err)
         sys.exit(1)
 
     try:
         for bucket in (keeper.src_path, keeper.tgt_path, keeper.coords_path):
-            spark.check_s3_object_existence(key=bucket.split(sep="/")[2], type="bucket")  # type: ignore
+            collector.check_s3_object_existence(key=bucket.split(sep="/")[2], type="bucket")  # type: ignore
     except S3ServiceError as err:
         logger.error(err)
         sys.exit(1)
 
     try:
-        spark.init_session(
+        collector.init_session(
             app_name=config.get_spark_application_name,
             spark_conf=conf,
             log4j_level=config.log4j_level,  # type: ignore
         )
-        spark.collect_location_zone_agg_datamart(keeper=keeper)
+        collector.collect_add_to_friends_recommendations_dm(keeper=keeper)
 
     except CapturedException as err:
         logger.error(err)
         sys.exit(1)
 
     finally:
-        spark.stop_session()  # type: ignore
+        collector.stop_session()  # type: ignore
         sys.exit(2)
 
 
