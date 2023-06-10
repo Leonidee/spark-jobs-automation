@@ -79,9 +79,7 @@ class DataProcCluster(BaseRequestHandler):
         self.logger = (
             getLogger("aiflow.task")
             if self.config.IS_PROD
-            else SparkLogger(level=self.config.python_log_level).get_logger(
-                logger_name=__name__
-            )
+            else SparkLogger().get_logger(name=__name__)
         )
 
         environ = EnvironManager()

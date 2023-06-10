@@ -29,11 +29,11 @@ class SparkLogger(Logger):
         config = Config("config.yaml")
 
         if not level:
-            self._level = config.python_log_level  # type: ignore
+            self._level = config.get_logging_level["python"]  # type: ignore
         else:
             self._level = level
 
-    def get_logger(self, logger_name: str) -> Logger:
+    def get_logger(self, name: str) -> Logger:
         """Returns configured ready-for-use logger instance
 
         ## Parameters
@@ -42,7 +42,7 @@ class SparkLogger(Logger):
         ## Returns
         `logging.Logger` : Returns Logger class object
         """
-        logger = getLogger(name=logger_name)
+        logger = getLogger(name=name)
 
         install(logger=logger, level=self._level)
         logger.setLevel(level=self._level)

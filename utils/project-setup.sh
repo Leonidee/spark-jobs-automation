@@ -46,7 +46,7 @@ else
         sudo apt-get update
         sudo apt-get install -y supervisor
     else
-        echo "Unsupported operating system. Please manually install supervisor"
+        echo "Unsupported operating system. Please manually install supervisor and re-run script"
         exit 1
     fi
 fi

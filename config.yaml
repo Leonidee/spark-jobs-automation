@@ -1,28 +1,32 @@
 environ:
-  IS_PROD: False
+  is_prod: false
 
 logging:
-  python_log_level: DEBUG
-  log4j_level: INFO 
+  level:
+    python: info
+    java: warn
 
 spark:
-  application_name: DATAMART-COLLECTOR-APP
+  application_name: datamart-collector-app
 
   jobs:
-    users_info_datamart:
-      DATE: 2022-03-12
-      DEPTH: 10 
-      SRC_PATH: /user/master/data/snapshots/geo-events/
-      TGT_PATH: /user/prod/data/bi-hadoop/users-info-datamart
+    collect_users_demographic_dm_job:
+      date: 2022-04-26
+      depth: 10 
+      src_path: s3a://data-ice-lake-05/messager-data/analytics/geo-events
+      tgt_path: s3a://data-ice-lake-05/messager-data/analytics/tmp
+      coords_path: s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates
 
-    location_zone_agg_datamart:
-      DATE: 2022-03-12
-      DEPTH: 10 
-      SRC_PATH: /master/data/snapshots/geo-events/
-      TGT_PATH: /user/prod/data/bi-hadoop/location-zone-agg-datamart
+    collect_events_total_cnt_agg_wk_mnth_dm_job:
+      date: 2022-04-26
+      depth: 10 
+      src_path: s3a://data-ice-lake-05/messager-data/analytics/geo-events
+      tgt_path: s3a://data-ice-lake-05/messager-data/analytics/tmp
+      coords_path: s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates
 
-    friend_recommendation_datamart:
-      DATE: 2022-03-12
-      DEPTH: 10 
-      SRC_PATH: /master/data/snapshots/geo-events/
-      TGT_PATH: /user/prod/data/recommendations/friend-recommendation-datamart
+    collect_add_to_friends_recommendations_dm_job:
+      date: 2022-04-26
+      depth: 10 
+      src_path: s3a://data-ice-lake-05/messager-data/analytics/geo-events
+      tgt_path: s3a://data-ice-lake-05/messager-data/analytics/tmp
+      coords_path: s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates

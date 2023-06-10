@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -45,7 +46,9 @@ class Config:
     """
 
     def __init__(
-        self, config_name: str = None, config_path: PathLike[str] | Path = None  # type: ignore
+        self,
+        config_name: str | None = None,
+        config_path: PathLike[str] | Path | None = None,
     ) -> None:
         """
 
@@ -78,8 +81,6 @@ class Config:
         except FileNotFoundError:
             raise EnableToGetConfig("Unable to load config file")
 
-        self._is_prod = self.config["environ"]["IS_PROD"]
-
     def _validate_config_name(self, name: str) -> bool:
         if not isinstance(name, str):
             raise ValueError("config name must be string type")
@@ -111,44 +112,25 @@ class Config:
         if not CONFIG_PATH:  # if not find config_name if project files
             raise EnableToGetConfig(
                 "Enable to find config file in project!\n"
-                "Please, create one or explicitly specify the full path to config file."
+                "Please, create one or explicitly specify the full path to file."
             )
         else:
             return CONFIG_PATH
 
     @property
     def IS_PROD(self) -> bool:
-        return self._is_prod  # type: ignore
-
-    @IS_PROD.setter
-    def IS_PROD(self, value: bool) -> None:
-        if not isinstance(value, bool):
-            raise ValueError("value must be boolean")
-
-        self._is_prod = value
+        return self.config["environ"]["is_prod"]
 
     @property
-    def get_users_info_datamart_config(self) -> Dict[str, str] | Dict[str, int]:
-        return self.config["spark"]["jobs"]["users_info_datamart"]
-
-    @property
-    def get_location_zone_agg_datamart_config(self) -> Dict[str, str] | Dict[str, int]:
-        return self.config["spark"]["jobs"]["location_zone_agg_datamart"]
-
-    @property
-    def get_friend_recommendation_datamart_config(
+    def get_job_config(
         self,
-    ) -> Dict[str, str] | Dict[str, int]:
-        return self.config["spark"]["jobs"]["friend_recommendation_datamart"]
+    ) -> Dict[str, Dict[str, str | int | date]]:
+        return self.config["spark"]["jobs"]
 
     @property
-    def get_spark_application_name(self) -> str:
-        return self.config["spark"]["application_name"]
+    def get_logging_level(self) -> Dict[str, str]:
+        return {k: v.upper() for k, v in self.config["logging"]["level"].items()}
 
     @property
-    def log4j_level(self) -> str:
-        return self.config["logging"]["log4j_level"]
-
-    @property
-    def python_log_level(self) -> str:
-        return self.config["logging"]["python_log_level"]
+    def get_spark_app_name(self) -> str:
+        return self.config["spark"]["application_name"].upper()

@@ -1,38 +1,37 @@
 from __future__ import annotations
 
-import sys
-from logging import getLogger
 import os
-from pathlib import Path
+import sys
 import time
 from enum import Enum
-
+from logging import getLogger
+from pathlib import Path
 from typing import TYPE_CHECKING
-
 
 import requests
 from requests.exceptions import (
     ConnectionError,
     HTTPError,
     InvalidSchema,
-    Timeout,
     InvalidURL,
-    MissingSchema,
     JSONDecodeError,
+    MissingSchema,
+    Timeout,
 )
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.environ import EnvironManager
-from src.submitter.exceptions import (
-    UnableToSubmitJob,
-    UnableToSendRequest,
-    UnableToGetResponse,
-)
-from src.logger import SparkLogger
 from src.base import BaseRequestHandler
+from src.environ import EnvironManager
+from src.logger import SparkLogger
+from src.submitter.exceptions import (
+    UnableToGetResponse,
+    UnableToSendRequest,
+    UnableToSubmitJob,
+)
 
 if TYPE_CHECKING:
     from typing import Literal
+
     from src.keeper import ArgsKeeper
 
 
@@ -51,6 +50,8 @@ class SparkSubmitter(BaseRequestHandler):
     Send request to submit 'users_info_datamart_job.py' job:
     >>> submitter.submit_job(job="users_info_datamart_job", keeper=keeper)
     """
+
+    __slots__ = "logger", "_CLUSTER_API_BASE_URL"
 
     def __init__(
         self,
@@ -74,9 +75,7 @@ class SparkSubmitter(BaseRequestHandler):
         self.logger = (
             getLogger("aiflow.task")
             if self.config.IS_PROD
-            else SparkLogger(level=self.config.python_log_level).get_logger(
-                logger_name=__name__
-            )
+            else SparkLogger().get_logger(name=__name__)
         )
 
         environ = EnvironManager()
@@ -85,7 +84,7 @@ class SparkSubmitter(BaseRequestHandler):
         _REQUIRED_VAR = "CLUSTER_API_BASE_URL"
         environ.check_environ(var=_REQUIRED_VAR)
 
-        self._API_BASE_URL = os.getenv(_REQUIRED_VAR)
+        self._CLUSTER_API_BASE_URL = os.getenv(_REQUIRED_VAR)
 
     def submit_job(self, job: Literal["collect_users_demographic_dm_job", "location_zone_agg_datamart_job", "friend_recommendation_datamart_job"], keeper: ArgsKeeper) -> bool:  # type: ignore
         """Sends request to API to submit Spark job in Hadoop Cluster.
@@ -105,7 +104,7 @@ class SparkSubmitter(BaseRequestHandler):
             try:
                 self.logger.debug(f"Requesting API. Try: {_TRY}")
                 response = requests.post(
-                    url=f"{self._API_BASE_URL}/submit_{job}",
+                    url=f"{self._CLUSTER_API_BASE_URL}/submit_{job}",
                     timeout=self._SESSION_TIMEOUT,
                     data=keeper.json(),
                 )
