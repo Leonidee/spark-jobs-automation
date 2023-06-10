@@ -12,7 +12,6 @@ from src.keeper import ArgsKeeper, SparkConfigKeeper
 from src.logger import SparkLogger
 from src.spark import DatamartCollector
 
-
 config = Config("config.yaml")
 
 logger = SparkLogger().get_logger(logger_name=__name__)

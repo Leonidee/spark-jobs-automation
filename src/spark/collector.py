@@ -420,16 +420,16 @@ class DatamartCollector(SparkRunner):
 
         import pyspark.sql.functions as F
         from pyspark.sql import Window as W
-        from pyspark.sql.utils import AnalysisException
         from pyspark.sql.types import (
             ArrayType,
             IntegerType,
             LongType,
+            StringType,
             StructField,
             StructType,
-            StringType,
             TimestampType,
         )
+        from pyspark.sql.utils import AnalysisException
 
         _job_start = datetime.now()
 
@@ -613,8 +613,8 @@ class DatamartCollector(SparkRunner):
             StructField,
             StructType,
         )
-        from pyspark.storagelevel import StorageLevel
         from pyspark.sql.utils import AnalysisException
+        from pyspark.storagelevel import StorageLevel
 
         cities_coords_sdf = self._get_cities_coords_df(keeper=keeper).persist(
             storageLevel=StorageLevel.MEMORY_ONLY
@@ -929,16 +929,16 @@ class DatamartCollector(SparkRunner):
         self.logger.info(f"Staring collecting '{_DATAMART_NAME}'")
         _job_start = datetime.now()
 
-        from pyspark.sql import Window as W
         import pyspark.sql.functions as F
-        from pyspark.sql.utils import AnalysisException
+        from pyspark.sql import Window as W
         from pyspark.sql.types import (
-            StructType,
-            StructField,
             IntegerType,
-            TimestampType,
             LongType,
+            StructField,
+            StructType,
+            TimestampType,
         )
+        from pyspark.sql.utils import AnalysisException
 
         messages_src_paths = self._get_src_paths(keeper=keeper, event_type="message")
         real_contacts_sdf = (
