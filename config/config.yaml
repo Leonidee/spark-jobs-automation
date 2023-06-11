@@ -1,5 +1,5 @@
 environ:
-  is_prod: false
+  is_prod: true
 
 logging:
   level:
@@ -12,21 +12,21 @@ spark:
   jobs:
     collect_users_demographic_dm_job:
       date: 2022-04-26
-      depth: 10 
+      depth: 10
       src_path: s3a://data-ice-lake-05/messager-data/analytics/geo-events
       tgt_path: s3a://data-ice-lake-05/messager-data/analytics/tmp
       coords_path: s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates
 
     collect_events_total_cnt_agg_wk_mnth_dm_job:
       date: 2022-04-26
-      depth: 10 
+      depth: 10
       src_path: s3a://data-ice-lake-05/messager-data/analytics/geo-events
       tgt_path: s3a://data-ice-lake-05/messager-data/analytics/tmp
       coords_path: s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates
 
     collect_add_to_friends_recommendations_dm_job:
       date: 2022-04-26
-      depth: 10 
+      depth: 10
       src_path: s3a://data-ice-lake-05/messager-data/analytics/geo-events
       tgt_path: s3a://data-ice-lake-05/messager-data/analytics/tmp
       coords_path: s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates

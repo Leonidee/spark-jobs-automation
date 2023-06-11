@@ -45,10 +45,12 @@ class Config:
     2022-03-12
     """
 
+    __slots__ = ("_CONFIG_NAME", "_CONFIG_PATH", "config")
+
     def __init__(
         self,
         config_name: str | None = None,
-        config_path: PathLike[str] | Path | None = None,
+        config_path: PathLike[str] | Path | str | None = None,
     ) -> None:
         """
 
@@ -78,8 +80,8 @@ class Config:
         try:
             with open(self._CONFIG_PATH) as f:
                 self.config = yaml.safe_load(f)
-        except FileNotFoundError:
-            raise UnableToGetConfig("Unable to load config file")
+        except FileNotFoundError as err:
+            raise UnableToGetConfig(str(err))
 
     def _validate_config_name(self, name: str) -> bool:
         if not isinstance(name, str):
@@ -90,32 +92,15 @@ class Config:
         return True
 
     def _find_config(self) -> Path:
-        CONFIG_PATH = None
+        for dirpath, _, filenames in os.walk(Path.cwd()):
+            for filename in filenames:
+                if filename == self._CONFIG_NAME:
+                    return Path(dirpath, filename)
 
-        _PROJECT_NAME = "spark-jobs-automation"
-        _ = os.path.abspath(__file__)
-        i, _ = _.split(_PROJECT_NAME)
-        root_path = i + _PROJECT_NAME
-
-        for dirpath, _, files in os.walk(
-            top=root_path
-        ):  # os.walk returns 3 tuples, we need dirpath and files
-            if (
-                self._CONFIG_NAME in files
-            ):  # if project files contains given config_name
-                for file in files:
-                    if (
-                        file == self._CONFIG_NAME
-                    ):  # try to find file which name equal to given config_name
-                        CONFIG_PATH = Path(dirpath, file)
-
-        if not CONFIG_PATH:  # if not find config_name if project files
-            raise UnableToGetConfig(
-                "Enable to find config file in project!\n"
-                "Please, create one or explicitly specify the full path to file."
-            )
-        else:
-            return CONFIG_PATH
+        raise UnableToGetConfig(
+            "Enable to find config file in project!\n"
+            "Please, create one or explicitly specify the full path to file."
+        )
 
     @property
     def IS_PROD(self) -> bool:

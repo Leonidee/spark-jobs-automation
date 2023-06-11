@@ -32,8 +32,8 @@ notifyer = TelegramNotifyer()
 logger = getLogger("aiflow.task")
 
 DEFAULT_ARGS = dict(
-    retries=3,
-    retry_delay=timedelta(seconds=45),
+    retries=1,
+    retry_delay=timedelta(seconds=30),
     on_failure_callback=notifyer.notify_on_task_failure,
 )
 
@@ -214,7 +214,7 @@ def wait_until_cluster_stopped(cluster: DataProcCluster) -> ...:
 def taskflow() -> ...:
     cluster = DataProcCluster()
     submitter = SparkSubmitter()
-    config = Config()
+    config = Config(config_name="config.yaml")
 
     begin = EmptyOperator(task_id="begining")
 
@@ -254,9 +254,4 @@ def taskflow() -> ...:
     )
 
 
-if __name__ == "__main__":
-    try:
-        taskflow()
-    except Exception as err:
-        logger.exception(err)
-        sys.exit(1)
+taskflow()

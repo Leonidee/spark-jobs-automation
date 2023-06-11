@@ -86,7 +86,7 @@ class SparkSubmitter(BaseRequestHandler):
 
         self._CLUSTER_API_BASE_URL = os.getenv(_REQUIRED_VAR)
 
-    def submit_job(self, job: Literal["collect_users_demographic_dm_job", "location_zone_agg_datamart_job", "friend_recommendation_datamart_job"], keeper: ArgsKeeper) -> bool:  # type: ignore
+    def submit_job(self, job: Literal["collect_users_demographic_dm_job", "collect_events_total_cnt_agg_wk_mnth_dm_job", "collect_add_to_friends_recommendations_dm_job"], keeper: ArgsKeeper) -> bool:  # type: ignore
         """Sends request to API to submit Spark job in Hadoop Cluster.
 
         ## Parameters

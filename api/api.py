@@ -12,17 +12,23 @@ from src.logger import SparkLogger
 
 app = FastAPI()
 
+logger = SparkLogger().get_logger(name=__name__)
+
 SPARK_SUBMIT_EXEC = "/usr/bin/spark-submit"
 PROJECT_PATH = str(Path(__file__).parent.parent)
 
-logger = SparkLogger().get_logger(logger_name=__name__)
+JOBS = (
+    "collect_users_demographic_dm_job",
+    "collect_events_total_cnt_agg_wk_mnth_dm_job",
+    "collect_add_to_friends_recommendations_dm_job",
+)
 
 
-@app.post("/submit_collect_users_demographic_dm_job")
+@app.post(f"/submit_{JOBS[0]}")
 def submit_collect_users_demographic_dm_job(keeper: ArgsKeeper):
     CMD = [
         SPARK_SUBMIT_EXEC,
-        f"{PROJECT_PATH}/jobs/collect_users_demographic_dm_job.py",
+        f"{PROJECT_PATH}/jobs/{JOBS[0]}.py",
         keeper.date,
         str(keeper.depth),
         keeper.src_path,
@@ -35,11 +41,11 @@ def submit_collect_users_demographic_dm_job(keeper: ArgsKeeper):
     return output
 
 
-@app.post("/submit_collect_events_total_cnt_agg_wk_mnth_dm_job")
+@app.post(f"/submit_{JOBS[1]}")
 def submit_collect_events_total_cnt_agg_wk_mnth_dm_job(keeper: ArgsKeeper):
     CMD = [
         SPARK_SUBMIT_EXEC,
-        f"{PROJECT_PATH}/jobs/collect_events_total_cnt_agg_wk_mnth_dm_job.py",
+        f"{PROJECT_PATH}/jobs/{JOBS[1]}.py",
         keeper.date,
         str(keeper.depth),
         keeper.src_path,
@@ -52,11 +58,11 @@ def submit_collect_events_total_cnt_agg_wk_mnth_dm_job(keeper: ArgsKeeper):
     return output
 
 
-@app.post("/submit_collect_add_to_friends_recommendations_dm_job")
+@app.post(f"/submit_{JOBS[2]}")
 def submit_collect_add_to_friends_recommendations_dm_job(keeper: ArgsKeeper):
     CMD = [
         SPARK_SUBMIT_EXEC,
-        f"{PROJECT_PATH}/jobs/collect_add_to_friends_recommendations_dm_job.py",
+        f"{PROJECT_PATH}/jobs/{JOBS[2]}.py",
         keeper.date,
         str(keeper.depth),
         keeper.src_path,
