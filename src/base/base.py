@@ -11,7 +11,7 @@ from src.config import Config
 class BaseRequestHandler:
     """Base Requests handler class. Contains basic attributes. Must be inherited by other classes."""
 
-    __slots__ = "_MAX_RETRIES", "_DELAY", "_SESSION_TIMEOUT", "config", "logger"
+    __slots__ = "_MAX_RETRIES", "_DELAY", "_SESSION_TIMEOUT", "config"
 
     def __init__(
         self,

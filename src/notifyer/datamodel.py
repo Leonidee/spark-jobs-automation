@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import Enum
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class AirflowTaskData:
     task: str
     dag: str
@@ -19,7 +19,7 @@ class MessageType(Enum):
     failed = "failed"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class TelegramMessage:
     task_data: AirflowTaskData
     type: MessageType

@@ -57,12 +57,7 @@ class DataProcCluster(BaseRequestHandler):
     ... [2023-05-26 12:59:39] {src.cluster.cluster:165} INFO: The target status has been reached!
     """
 
-    __slots__ = (
-        "_CLUSTER_ID",
-        "_BASE_URL",
-        "_OAUTH_TOKEN",
-        "_IAM_TOKEN",
-    )
+    __slots__ = ("_CLUSTER_ID", "_BASE_URL", "_OAUTH_TOKEN", "_IAM_TOKEN", "logger")
 
     def __init__(
         self,
@@ -129,16 +124,16 @@ class DataProcCluster(BaseRequestHandler):
                 )
                 response.raise_for_status()
 
-            except (InvalidSchema, InvalidURL, MissingSchema) as e:
+            except (InvalidSchema, InvalidURL, MissingSchema) as err:
                 raise YandexAPIError(
-                    f"{e}. Check provided URL for POST request in '_get_iam_token' method"
+                    f"{err}. Check provided URL for POST request in '_get_iam_token' method"
                 )
 
-            except (HTTPError, ConnectionError, Timeout) as e:
+            except (HTTPError, ConnectionError, Timeout) as err:
                 if _TRY == self._MAX_RETRIES:
-                    raise YandexAPIError(str(e))
+                    raise YandexAPIError(str(err))
                 else:
-                    self.logger.warning(f"{e}. Retrying...")
+                    self.logger.warning(f"{err}. Retrying...")
                     time.sleep(self._DELAY)
 
                     continue
@@ -150,11 +145,11 @@ class DataProcCluster(BaseRequestHandler):
                     self.logger.debug("Decoding response")
                     response = response.json()
 
-                except JSONDecodeError as e:
+                except JSONDecodeError as err:
                     if _TRY == self._MAX_RETRIES:
-                        raise YandexAPIError(str(e))
+                        raise YandexAPIError(str(err))
                     else:
-                        self.logger.warning(f"{e}. Retrying...")
+                        self.logger.warning(f"{err}. Retrying...")
                         _TRY += 1
                         time.sleep(self._DELAY)
 
@@ -217,16 +212,16 @@ class DataProcCluster(BaseRequestHandler):
                 )
                 response.raise_for_status()
 
-            except (InvalidSchema, InvalidURL, MissingSchema) as e:
+            except (InvalidSchema, InvalidURL, MissingSchema) as err:
                 raise YandexAPIError(
-                    f"{e}. Please check 'YC_DATAPROC_BASE_URL' and 'YC_DATAPROC_CLUSTER_ID' environment variables"
+                    f"{err}. Please check 'YC_DATAPROC_BASE_URL' and 'YC_DATAPROC_CLUSTER_ID' environment variables"
                 )
 
-            except (HTTPError, ConnectionError, Timeout) as e:
+            except (HTTPError, ConnectionError, Timeout) as err:
                 if _TRY == self._MAX_RETRIES:
-                    raise YandexAPIError(str(e))
+                    raise YandexAPIError(str(err))
 
-                self.logger.warning(f"{e}. Retrying...")
+                self.logger.warning(f"{err}. Retrying...")
                 time.sleep(self._DELAY)
 
                 continue
@@ -238,8 +233,8 @@ class DataProcCluster(BaseRequestHandler):
                     self.logger.debug("Decoding response")
                     response = response.json()
                     self.logger.debug(f"{response=}")
-                except JSONDecodeError as e:
-                    self.logger.warning(str(e))
+                except JSONDecodeError as err:
+                    self.logger.warning(str(err))
                     pass
 
                 self.logger.info("Command in progress!")
@@ -283,16 +278,16 @@ class DataProcCluster(BaseRequestHandler):
                 )
                 response.raise_for_status()
 
-            except (InvalidSchema, InvalidURL, MissingSchema) as e:
+            except (InvalidSchema, InvalidURL, MissingSchema) as err:
                 raise YandexAPIError(
-                    f"{e}. Please check 'YC_DATAPROC_BASE_URL' and 'YC_DATAPROC_CLUSTER_ID' environment variables"
+                    f"{err}. Please check 'YC_DATAPROC_BASE_URL' and 'YC_DATAPROC_CLUSTER_ID' environment variables"
                 )
 
-            except (HTTPError, ConnectionError, Timeout) as e:
+            except (HTTPError, ConnectionError, Timeout) as err:
                 if _TRY == self._MAX_RETRIES:
-                    raise YandexAPIError(str(e))
+                    raise YandexAPIError(str(err))
                 else:
-                    self.logger.warning(f"{e}. Retrying...")
+                    self.logger.warning(f"{err}. Retrying...")
                     time.sleep(self._DELAY)
 
                     continue
@@ -305,11 +300,11 @@ class DataProcCluster(BaseRequestHandler):
                     response = response.json()
                     self.logger.debug(f"{response=}")
 
-                except JSONDecodeError as e:
+                except JSONDecodeError as err:
                     if _TRY == self._MAX_RETRIES:
-                        raise YandexAPIError(str(e))
+                        raise YandexAPIError(str(err))
                     else:
-                        self.logger.warning(f"{e}. Retrying...")
+                        self.logger.warning(f"{err}. Retrying...")
                         time.sleep(self._DELAY)
 
                         continue

@@ -1,12 +1,14 @@
+from __future__ import annotations
+
 import sys
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 # airflow
 from airflow.decorators import dag, task  # type: ignore
-from airflow.models.baseoperator import chain  # type: ignore
+from airflow.models.baseoperator import chain as chain_tasks  # type: ignore
 from airflow.operators.empty import EmptyOperator  # type: ignore
 
 if TYPE_CHECKING:
@@ -14,11 +16,17 @@ if TYPE_CHECKING:
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.cluster.cluster import DataProcCluster
-from src.config.config import Config
+from src.cluster import DataProcCluster, YandexAPIError
+from src.config import Config, UnableToGetConfig
+from src.environ import DotEnvError, EnvironNotSet
 from src.keeper import ArgsKeeper
 from src.notifyer import TelegramNotifyer
-from src.submitter import SparkSubmitter
+from src.submitter import (
+    SparkSubmitter,
+    UnableToGetResponse,
+    UnableToSendRequest,
+    UnableToSubmitJob,
+)
 
 notifyer = TelegramNotifyer()
 logger = getLogger("aiflow.task")
@@ -32,19 +40,27 @@ DEFAULT_ARGS = dict(
 
 @task(default_args=DEFAULT_ARGS)
 def start_cluster(cluster: DataProcCluster) -> ...:
-    "Start DataProc Cluster"
-    cluster.exec_command(command="start")
+    "Starts DataProc Cluster"
+    try:
+        cluster.exec_command(command="start")
+    except (YandexAPIError, UnableToGetConfig, DotEnvError, EnvironNotSet) as err:
+        logger.exception(err)
+        sys.exit(1)
 
 
 @task(default_args=DEFAULT_ARGS)
 def wait_until_cluster_running(cluster: DataProcCluster) -> ...:
-    "Wait until Cluster is ready to use"
-    cluster.check_status(target_status="running")
+    "Waits until Cluster will be ready to use"
+    try:
+        cluster.check_status(target_status="running")
+    except (YandexAPIError, UnableToGetConfig, DotEnvError, EnvironNotSet) as err:
+        logger.exception(err)
+        sys.exit(1)
 
 
 @task(default_args=DEFAULT_ARGS)
 def collect_users_demographic_dm_job(
-    spark_submitter: SparkSubmitter, job_args: Dict
+    spark_submitter: SparkSubmitter, job_args: Dict[str, str | int | date]
 ) -> ...:
     try:
         keeper = ArgsKeeper(
@@ -62,28 +78,31 @@ def collect_users_demographic_dm_job(
         logger.warning(err)
         pass
 
-    spark_submitter.submit_job(job="collect_users_demographic_dm_job", keeper=keeper)  # type: ignore
+    try:
+        spark_submitter.submit_job(job="collect_users_demographic_dm_job", keeper=keeper)  # type: ignore
+    except (
+        UnableToGetResponse,
+        UnableToSendRequest,
+        UnableToSubmitJob,
+        UnableToGetConfig,
+        DotEnvError,
+        EnvironNotSet,
+    ) as err:
+        logger.exception(err)
+        sys.exit(1)
 
 
 @task(default_args=DEFAULT_ARGS)
 def collect_events_total_cnt_agg_wk_mnth_dm_job(
-    spark_submitter: SparkSubmitter, job_args: Dict
+    spark_submitter: SparkSubmitter, job_args: Dict[str, str | int | date]
 ) -> ...:
     try:
         keeper = ArgsKeeper(
-            date=str(config.get_job_config["collect_users_demographic_dm_job"]["date"]),
-            depth=config.get_job_config["collect_users_demographic_dm_job"][
-                "depth"
-            ],  # type:ignore
-            src_path=config.get_job_config["collect_users_demographic_dm_job"][
-                "src_path"
-            ],  # type:ignore
-            tgt_path=config.get_job_config["collect_users_demographic_dm_job"][
-                "tgt_path"
-            ],  # type:ignore
-            coords_path=config.get_job_config["collect_users_demographic_dm_job"][
-                "coords_path"
-            ],  # type:ignore
+            date=str(job_args["date"]),
+            depth=job_args["depth"],  # type:ignore
+            src_path=job_args["src_path"],  # type:ignore
+            tgt_path=job_args["tgt_path"],  # type:ignore
+            coords_path=job_args["coords_path"],  # type:ignore
             processed_dttm=datetime.now().strftime(r"%Y-%m-%d %H:%M:%S").replace(" ", "T"),  # type: ignore
         )
     except ValueError as err:
@@ -93,28 +112,31 @@ def collect_events_total_cnt_agg_wk_mnth_dm_job(
         logger.warning(err)
         pass
 
-    spark_submitter.submit_job(job="collect_events_total_cnt_agg_wk_mnth_dm_job", keeper=keeper)  # type: ignore
+    try:
+        spark_submitter.submit_job(job="collect_events_total_cnt_agg_wk_mnth_dm_job", keeper=keeper)  # type: ignore
+    except (
+        UnableToGetResponse,
+        UnableToSendRequest,
+        UnableToSubmitJob,
+        UnableToGetConfig,
+        DotEnvError,
+        EnvironNotSet,
+    ) as err:
+        logger.exception(err)
+        sys.exit(1)
 
 
 @task(default_args=DEFAULT_ARGS)
 def collect_add_to_friends_recommendations_dm_job(
-    spark_submitter: SparkSubmitter, job_args: Dict
+    spark_submitter: SparkSubmitter, job_args: Dict[str, str | int | date]
 ) -> ...:
     try:
         keeper = ArgsKeeper(
-            date=str(config.get_job_config["collect_users_demographic_dm_job"]["date"]),
-            depth=config.get_job_config["collect_users_demographic_dm_job"][
-                "depth"
-            ],  # type:ignore
-            src_path=config.get_job_config["collect_users_demographic_dm_job"][
-                "src_path"
-            ],  # type:ignore
-            tgt_path=config.get_job_config["collect_users_demographic_dm_job"][
-                "tgt_path"
-            ],  # type:ignore
-            coords_path=config.get_job_config["collect_users_demographic_dm_job"][
-                "coords_path"
-            ],  # type:ignore
+            date=str(job_args["date"]),
+            depth=job_args["depth"],  # type:ignore
+            src_path=job_args["src_path"],  # type:ignore
+            tgt_path=job_args["tgt_path"],  # type:ignore
+            coords_path=job_args["coords_path"],  # type:ignore
             processed_dttm=datetime.now().strftime(r"%Y-%m-%d %H:%M:%S").replace(" ", "T"),  # type: ignore
         )
     except ValueError as err:
@@ -124,34 +146,57 @@ def collect_add_to_friends_recommendations_dm_job(
         logger.warning(err)
         pass
 
-    spark_submitter.submit_job(job="collect_add_to_friends_recommendations_dm_job", keeper=keeper)  # type: ignore
+    try:
+        spark_submitter.submit_job(job="collect_add_to_friends_recommendations_dm_job", keeper=keeper)  # type: ignore
+    except (
+        UnableToGetResponse,
+        UnableToSendRequest,
+        UnableToSubmitJob,
+        UnableToGetConfig,
+        DotEnvError,
+        EnvironNotSet,
+    ) as err:
+        logger.exception(err)
+        sys.exit(1)
 
 
 @task(
     default_args=DEFAULT_ARGS,
     trigger_rule="all_success",
 )
-def stop_cluster_success_way(cluster: DataProcCluster) -> None:
-    "Stop Cluster if every of upstream tasks successfully executed, if not - skipped"
-    cluster.exec_command(command="stop")
+def stop_cluster_success_way(cluster: DataProcCluster) -> ...:
+    "Stops Cluster if every of upstream tasks successfully executed, if not - skipped"
+    try:
+        cluster.exec_command(command="stop")
+    except (YandexAPIError, UnableToGetConfig, DotEnvError, EnvironNotSet) as err:
+        logger.exception(err)
+        sys.exit(1)
 
 
 @task(
     default_args=DEFAULT_ARGS,
     trigger_rule="one_failed",
 )
-def stop_cluster_failed_way(cluster: DataProcCluster) -> None:
-    "Stop Cluster if one of the upstream tasks failed, if not - skipped"
-    cluster.exec_command(command="stop")
+def stop_cluster_failed_way(cluster: DataProcCluster) -> ...:
+    "Stops Cluster if one of the upstream tasks failed, if not - skipped"
+    try:
+        cluster.exec_command(command="stop")
+    except (YandexAPIError, UnableToGetConfig, DotEnvError, EnvironNotSet) as err:
+        logger.exception(err)
+        sys.exit(1)
 
 
 @task(
     default_args=DEFAULT_ARGS,
     trigger_rule="all_done",
 )
-def wait_until_cluster_stopped(cluster: DataProcCluster) -> None:
-    "Wait until Cluster is stopped"
-    cluster.check_status(target_status="stopped")
+def wait_until_cluster_stopped(cluster: DataProcCluster) -> ...:
+    "Waits until Cluster will be stopped"
+    try:
+        cluster.check_status(target_status="stopped")
+    except (YandexAPIError, UnableToGetConfig, DotEnvError, EnvironNotSet) as err:
+        logger.exception(err)
+        sys.exit(1)
 
 
 @dag(
@@ -166,43 +211,52 @@ def wait_until_cluster_stopped(cluster: DataProcCluster) -> None:
     },
     default_view="grid",
 )
-def taskflow() -> None:
+def taskflow() -> ...:
     cluster = DataProcCluster()
     submitter = SparkSubmitter()
     config = Config()
-    config.get_job_config["collect_add_to_friends_recommendations_dm_job"]
 
     begin = EmptyOperator(task_id="begining")
 
     start = start_cluster(cluster=cluster)
     is_running = wait_until_cluster_running(cluster=cluster)
 
-    user_info = collect_users_demographic_dm_job(
-        spark_submitter=submitter, config=config
+    users_demographic_dm = collect_users_demographic_dm_job(
+        spark_submitter=submitter,
+        job_args=config.get_job_config["collect_users_demographic_dm_job"],
     )
-    location_zone_agg = submit_location_zone_agg_datamart_job(
-        spark_submitter=submitter, config=config
+    events_total_cnt_agg_wk_mnth_dm = collect_events_total_cnt_agg_wk_mnth_dm_job(
+        spark_submitter=submitter,
+        job_args=config.get_job_config["collect_events_total_cnt_agg_wk_mnth_dm_job"],
     )
-    # friend_reco = submit_friend_recommendation_datamart_job(spark_submitter=submitter, config=config)
+    add_to_friends_recommendations_dm = collect_add_to_friends_recommendations_dm_job(
+        spark_submitter=submitter,
+        job_args=config.get_job_config["collect_add_to_friends_recommendations_dm_job"],
+    )
 
-    stop_if_failed = stop_cluster_failed_way(cluster=cluster)
-    stop_if_success = stop_cluster_success_way(cluster=cluster)
+    stop_cluster_failed = stop_cluster_failed_way(cluster=cluster)
+    stop_cluster_success = stop_cluster_success_way(cluster=cluster)
 
     is_stopped = wait_until_cluster_stopped(cluster=cluster)
 
     end = EmptyOperator(task_id="ending")
 
-    chain(
+    chain_tasks(
         begin,
         start,
         is_running,
-        user_info,
-        location_zone_agg,
-        # friend_reco,
-        [stop_if_failed, stop_if_success],
+        users_demographic_dm,
+        events_total_cnt_agg_wk_mnth_dm,
+        add_to_friends_recommendations_dm,
+        [stop_cluster_failed, stop_cluster_success],
         is_stopped,
         end,
     )
 
 
-taskflow()
+if __name__ == "__main__":
+    try:
+        taskflow()
+    except Exception as err:
+        logger.exception(err)
+        sys.exit(1)

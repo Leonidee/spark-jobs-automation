@@ -5,7 +5,7 @@ from pyspark.sql.utils import CapturedException
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
-from src.config import Config, EnableToGetConfig
+from src.config import Config, UnableToGetConfig
 from src.environ import DotEnvError, EnvironNotSet
 from src.helper import S3ServiceError
 from src.keeper import ArgsKeeper, SparkConfigKeeper
@@ -14,7 +14,7 @@ from src.spark import DatamartCollector
 
 config = Config("config.yaml")
 
-logger = SparkLogger().get_logger(logger_name=__name__)
+logger = SparkLogger().get_logger(name=__name__)
 
 
 def main() -> ...:
@@ -53,7 +53,7 @@ def main() -> ...:
 
     try:
         collector = DatamartCollector()
-    except (DotEnvError, EnvironNotSet, EnableToGetConfig) as err:
+    except (DotEnvError, EnvironNotSet, UnableToGetConfig) as err:
         logger.error(err)
         sys.exit(1)
 
@@ -66,9 +66,9 @@ def main() -> ...:
 
     try:
         collector.init_session(
-            app_name=config.get_spark_application_name,
+            app_name=config.get_spark_app_name,
             spark_conf=conf,
-            log4j_level=config.log4j_level,  # type: ignore
+            log4j_level=config.get_logging_level["java"],  # type: ignore
         )
         collector.collect_add_to_friends_recommendations_dm(keeper=keeper)
 

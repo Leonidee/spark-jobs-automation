@@ -40,7 +40,7 @@ class EnvironManager:
         self._find_dotenv = find_dotenv
         self._read_dotenv = load_dotenv
 
-        self.logger = SparkLogger().get_logger(logger_name=__name__)
+        self.logger = SparkLogger().get_logger(name=__name__)
 
     def load_environ(self, dotenv_file_name: str | None = None) -> bool:
         """Find .env file and load environment variables from it.

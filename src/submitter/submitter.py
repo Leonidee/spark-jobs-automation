@@ -111,19 +111,19 @@ class SparkSubmitter(BaseRequestHandler):
                 response.raise_for_status()
                 break
 
-            except Timeout as e:
-                raise UnableToSendRequest(f"{e}. Unable to submit '{job}' job.")
+            except Timeout as err:
+                raise UnableToSendRequest(f"{err}. Unable to submit '{job}' job.")
 
-            except (InvalidSchema, InvalidURL, MissingSchema) as e:
+            except (InvalidSchema, InvalidURL, MissingSchema) as err:
                 raise UnableToSendRequest(
-                    f"{e}. Please check 'CLUSTER_API_BASE_URL' environ variable"
+                    f"{err}. Please check 'CLUSTER_API_BASE_URL' environ variable"
                 )
 
-            except (HTTPError, ConnectionError) as e:
+            except (HTTPError, ConnectionError) as err:
                 if _TRY == self._MAX_RETRIES:
-                    raise UnableToSendRequest(str(e))
+                    raise UnableToSendRequest(str(err))
                 else:
-                    self.logger.warning(f"{e}. Retrying...")
+                    self.logger.warning(f"{err}. Retrying...")
                     time.sleep(self._DELAY)
 
                     continue
@@ -139,8 +139,8 @@ class SparkSubmitter(BaseRequestHandler):
                 response = response.json()  # type: ignore
                 self.logger.debug(f"{response=}")
 
-            except JSONDecodeError as e:
-                raise UnableToGetResponse(f"{str(e)}. Posible failed to submit job.")
+            except JSONDecodeError as err:
+                raise UnableToGetResponse(f"{str(err)}. Posible failed to submit job.")
 
             if response.get("returncode") == 2:
                 self.logger.info(f"'{job}' job was submitted successfully!")

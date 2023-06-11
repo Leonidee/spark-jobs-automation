@@ -1,12 +1,12 @@
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
-from datetime import datetime
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.spark.runner import SparkRunner
-from src.logger import SparkLogger
 from src.keeper import SparkConfigKeeper
+from src.logger import SparkLogger
+from src.spark.runner import SparkRunner
 
 
 class DataMover(SparkRunner):
@@ -15,7 +15,7 @@ class DataMover(SparkRunner):
     def __init__(self) -> None:
         super().__init__()
 
-        self.logger = SparkLogger().get_logger(logger_name=__name__)
+        self.logger = SparkLogger().get_logger(name=__name__)
 
     def init_session(
         self,

@@ -42,7 +42,7 @@ class TelegramNotifyer(BaseRequestHandler):
     See `.env.template` for more details.
     """
 
-    __slots__ = "_CHAT_ID", "_BOT_TOKEN"
+    __slots__ = "_CHAT_ID", "_BOT_TOKEN", "logger"
 
     def __init__(
         self,
@@ -118,26 +118,26 @@ class TelegramNotifyer(BaseRequestHandler):
 
                 return AirflowTaskData(task=task, dag=dag, execution_dt=execution_dt)
 
-            except KeyError as e:
+            except KeyError as err:
                 if _TRY == self._MAX_RETRIES:
                     raise AirflowContextError(
-                        f"Unable to get {e.args} key/keys from Aiflow context"
+                        f"Unable to get {err.args} key/keys from Aiflow context"
                     )
 
                 else:
                     self.logger.warning(
-                        f"Unable to get {e.args} key/keys from Aiflow context. Retrying..."
+                        f"Unable to get {err.args} key/keys from Aiflow context. Retrying..."
                     )
                     time.sleep(self._DELAY)
 
                     continue
 
-            except ValueError as e:
+            except ValueError as err:
                 if _TRY == self._MAX_RETRIES:
-                    raise AirflowContextError(str(e))
+                    raise AirflowContextError(str(err))
 
                 else:
-                    self.logger.warning(e)
+                    self.logger.warning(err)
                     time.sleep(self._DELAY)
 
                     continue
@@ -165,16 +165,16 @@ class TelegramNotifyer(BaseRequestHandler):
 
                 response.raise_for_status()
 
-            except (InvalidSchema, InvalidURL, MissingSchema) as e:
+            except (InvalidSchema, InvalidURL, MissingSchema) as err:
                 raise UnableToSendMessage(
-                    f"{e}. Check 'TG_BOT_TOKEN' and 'TG_CHAT_ID' or returning URL of '__make_url' function"
+                    f"{err}. Check 'TG_BOT_TOKEN' and 'TG_CHAT_ID' or returning URL of '__make_url' function"
                 )
 
-            except (HTTPError, ConnectionError, Timeout) as e:
+            except (HTTPError, ConnectionError, Timeout) as err:
                 if _TRY == self._MAX_RETRIES:
-                    raise UnableToSendMessage(str(e))
+                    raise UnableToSendMessage(str(err))
                 else:
-                    self.logger.warning(f"{e}. Retrying...")
+                    self.logger.warning(f"{err}. Retrying...")
                     time.sleep(self._DELAY)
 
                     continue
@@ -187,11 +187,11 @@ class TelegramNotifyer(BaseRequestHandler):
                     response = response.json()
                     self.logger.debug(f"{response=}")
 
-                except JSONDecodeError as e:
+                except JSONDecodeError as err:
                     if _TRY == self._MAX_RETRIES:
-                        raise UnableToSendMessage(str(e))
+                        raise UnableToSendMessage(str(err))
                     else:
-                        self.logger.warning(f"{e}. Retrying...")
+                        self.logger.warning(f"{err}. Retrying...")
                         time.sleep(self._DELAY)
 
                         continue

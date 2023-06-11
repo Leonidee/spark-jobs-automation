@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from typing import Dict
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.config.exceptions import EnableToGetConfig
+from src.config.exceptions import UnableToGetConfig
 
 
 class Config:
@@ -61,7 +61,7 @@ class Config:
 
         ## Raises
         `ValueError` : If failed to validate config file name or if one of the required arguments not specified\n
-        `EnableToGetConfig` : If unable to find or read config file
+        `UnableToGetConfig` : If unable to find or read config file
         """
         if config_name:
             self._validate_config_name(name=config_name)
@@ -79,7 +79,7 @@ class Config:
             with open(self._CONFIG_PATH) as f:
                 self.config = yaml.safe_load(f)
         except FileNotFoundError:
-            raise EnableToGetConfig("Unable to load config file")
+            raise UnableToGetConfig("Unable to load config file")
 
     def _validate_config_name(self, name: str) -> bool:
         if not isinstance(name, str):
@@ -110,7 +110,7 @@ class Config:
                         CONFIG_PATH = Path(dirpath, file)
 
         if not CONFIG_PATH:  # if not find config_name if project files
-            raise EnableToGetConfig(
+            raise UnableToGetConfig(
                 "Enable to find config file in project!\n"
                 "Please, create one or explicitly specify the full path to file."
             )
