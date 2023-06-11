@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.config import Config, EnableToGetConfig
+from src.config import Config, UnableToGetConfig
 
 
 class TestConfig:
@@ -17,7 +17,7 @@ class TestConfig:
         Config(config_path=Path(Path.home(), "Code/spark-jobs-automation/config.yaml"))
 
     def test_init_instance_wrong_path(self):
-        with pytest.raises(EnableToGetConfig, match="Enable to load config file"):
+        with pytest.raises(UnableToGetConfig, match="Enable to load config file"):
             Config(config_path="nonexistent/path/to/config.yaml")  # type: ignore
 
     def test_init_instance_without_args(self):
@@ -37,7 +37,7 @@ class TestConfig:
             config._validate_config_name(name="config_test.txt")
 
     def test_find_config_raises_if_not_find(self):
-        with pytest.raises(EnableToGetConfig):
+        with pytest.raises(UnableToGetConfig):
             Config(config_name="test_config.yaml")
 
     def test_is_prod_type(self, config):

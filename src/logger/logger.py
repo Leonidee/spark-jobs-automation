@@ -26,7 +26,7 @@ class SparkLogger(Logger):
     """
 
     def __init__(self, level: str | None = None):
-        config = Config("config.yaml")
+        config = Config(config_name="config.yaml")
 
         if not level:
             self._level = config.get_logging_level["python"]  # type: ignore
