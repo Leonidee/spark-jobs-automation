@@ -9,7 +9,7 @@ def main() -> ...:
     import os
 
     conf = Config(config_name="config.yaml")
-    a = conf.get_logging_level["python"]
+    a = conf.get_logging_level
     print(a)
 
 

@@ -113,7 +113,7 @@ class Config:
         return self.config["spark"]["jobs"]
 
     @property
-    def get_logging_level(self) -> Dict[str, str]:
+    def get_logging_level(self) -> Dict:
         return {k: v.upper() for k, v in self.config["logging"]["level"].items()}
 
     @property

@@ -8,11 +8,8 @@ from fastapi import FastAPI
 # package
 sys.path.append(str(Path(__file__).parent.parent))
 from src.keeper import ArgsKeeper
-from src.logger import SparkLogger
 
 app = FastAPI()
-
-logger = SparkLogger().get_logger(name=__name__)
 
 SPARK_SUBMIT_EXEC = "/usr/bin/spark-submit"
 PROJECT_PATH = str(Path(__file__).parent.parent)
@@ -84,8 +81,4 @@ def main() -> ...:
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as err:
-        logger.exception(err)
-        sys.exit(1)
+    main()
