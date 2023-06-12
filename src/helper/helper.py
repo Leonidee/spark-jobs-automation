@@ -43,9 +43,15 @@ class SparkHelper:
     )
 
     def __init__(self) -> None:
-        self.config = Config(config_name="config.yaml")
+        self.config = Config(
+            config_path=Path(
+                Path.home(), "code/spark-jobs-automation/config/config.yaml"
+            )
+        )
 
-        self.logger = SparkLogger().get_logger(name=__name__)
+        self.logger = SparkLogger(
+            level=self.config.get_logging_level["python"]
+        ).get_logger(name=__name__)
 
         environ = EnvironManager()
         environ.load_environ()
