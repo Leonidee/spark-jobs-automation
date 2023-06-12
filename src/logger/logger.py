@@ -25,15 +25,12 @@ class SparkLogger(Logger):
     [2023-05-24 17:32:16] {src.utils.environ:4} INFO: This is a test!
     """
 
-    def __init__(self, level: str | None = None):
-        config = Config(
-            config_path=Path(
-                Path.home(), "code/spark-jobs-automation/config/config.yaml"
-            )
-        )
+    __slots__ = ("config", "_level")
 
+    def __init__(self, level: str | None = None):
         if not level:
-            self._level = config.get_logging_level["python"]  # type: ignore
+            self.config = Config(config_name="config.yaml")
+            self._level = self.config.get_logging_level["python"]  # type: ignore
         else:
             self._level = level
 

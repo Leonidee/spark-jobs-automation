@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
+from src.config import Config
 from src.keeper import ArgsKeeper
 from src.logger import SparkLogger
 
@@ -14,14 +15,16 @@ app = FastAPI()
 
 SPARK_SUBMIT_EXEC = "/usr/bin/spark-submit"
 PROJECT_PATH = str(Path(__file__).parent.parent)
-
-logger = SparkLogger().get_logger(name=__name__)
-
 JOBS = (
     "collect_users_demographic_dm_job",
     "collect_events_total_cnt_agg_wk_mnth_dm_job",
     "collect_add_to_friends_recommendations_dm_job",
 )
+
+config = Config(
+    config_path=Path(Path.home(), "code/spark-jobs-automation/config/config.yaml")
+)
+logger = SparkLogger(level=config.get_logging_level["python"]).get_logger(name=__name__)
 
 
 @app.post(f"/submit_{JOBS[0]}")
@@ -84,4 +87,8 @@ def main() -> ...:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as err:
+        logger.exception(err)
+        sys.exit(1)

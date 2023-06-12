@@ -16,7 +16,7 @@ config = Config(
     config_path=Path(Path.home(), "code/spark-jobs-automation/config/config.yaml")
 )
 
-logger = SparkLogger().get_logger(name=__name__)
+logger = SparkLogger(level=config.get_logging_level["python"]).get_logger(name=__name__)
 
 
 def main() -> ...:

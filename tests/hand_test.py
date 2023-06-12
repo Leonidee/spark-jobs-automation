@@ -9,11 +9,14 @@ from src.logger import SparkLogger
 def main() -> ...:
     import os
 
-    log = SparkLogger().get_logger(name=__name__)
-    log.info("everythings is ok")
+    conf = Config(config_name="config.yaml")
+    print(conf.environ)
 
-    a = Path(__file__).absolute()
-    print(a)
+    conf.environ = "testing"
+    print(conf.environ)
+
+    conf.environ = "airflow"
+    print(conf.environ)
 
 
 if __name__ == "__main__":

@@ -214,7 +214,7 @@ def wait_until_cluster_stopped(cluster: DataProcCluster) -> ...:
 def taskflow() -> ...:
     cluster = DataProcCluster()
     submitter = SparkSubmitter()
-    config = Config(config_name="config.yaml")
+    config = Config(config_path=Path("/opt/airflow/config/config.yaml"))
 
     begin = EmptyOperator(task_id="begining")
 

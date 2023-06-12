@@ -73,7 +73,7 @@ class DataProcCluster(BaseRequestHandler):
         )
         self.logger = (
             getLogger("aiflow.task")
-            if self.config.IS_PROD
+            if self.config.environ == "airflow"
             else SparkLogger().get_logger(name=__name__)
         )
 

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import os
 import sys
+from logging import getLogger
 from pathlib import Path
 from typing import Tuple, overload
 
 from dotenv import find_dotenv, load_dotenv
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from src.config import Config
 from src.environ.exceptions import DotEnvError, EnvironNotSet
 from src.logger import SparkLogger
 
@@ -34,13 +36,19 @@ class EnvironManager:
     src.environ.exception.EnvironNotSet: Environment variables not set properly. You can find list of required variables here -> $PROJECT_DIR/templates/.env.template # <---- raised exception
     """
 
-    __slots__ = "_find_dotenv", "_read_dotenv", "logger"
+    __slots__ = ("_find_dotenv", "_read_dotenv", "logger", "config")
 
     def __init__(self) -> None:
         self._find_dotenv = find_dotenv
         self._read_dotenv = load_dotenv
 
-        self.logger = SparkLogger().get_logger(name=__name__)
+        self.config = Config(config_name="config.yaml")
+
+        self.logger = (
+            getLogger("aiflow.task")
+            if self.config.environ == "airflow"
+            else SparkLogger().get_logger(name=__name__)
+        )
 
     def load_environ(self, dotenv_file_name: str | None = None) -> bool:
         """Find .env file and load environment variables from it.

@@ -45,7 +45,7 @@ class Config:
     2022-03-12
     """
 
-    __slots__ = ("_CONFIG_NAME", "_CONFIG_PATH", "config")
+    __slots__ = ("_CONFIG_NAME", "_CONFIG_PATH", "_config", "_environ")
 
     def __init__(
         self,
@@ -79,7 +79,8 @@ class Config:
 
         try:
             with open(self._CONFIG_PATH) as f:
-                self.config = yaml.safe_load(f)
+                self._config = yaml.safe_load(f)
+                self._environ = self._config["environ"]["type"]
         except FileNotFoundError as err:
             raise UnableToGetConfig(str(err))
 
@@ -107,18 +108,29 @@ class Config:
 
     @property
     def IS_PROD(self) -> bool:
-        return bool(self.config["environ"]["is_prod"])
+        return bool(self._config["environ"]["is_prod"])
+
+    @property
+    def environ(self) -> str:
+        return self._environ
+
+    @environ.setter
+    def environ(self, v: str) -> ...:
+        if not isinstance(v, str):
+            raise ValueError("value must be string")
+
+        self._environ = v
 
     @property
     def get_job_config(
         self,
     ) -> Dict[str, Dict[str, str | int | date]]:
-        return self.config["spark"]["jobs"]
+        return self._config["spark"]["jobs"]
 
     @property
-    def get_logging_level(self) -> Dict[str, str | int | date]:
-        return {k: v.upper() for k, v in self.config["logging"]["level"].items()}
+    def get_logging_level(self) -> Dict[str, str]:
+        return {k: v.upper() for k, v in self._config["logging"]["level"].items()}
 
     @property
     def get_spark_app_name(self) -> str:
-        return self.config["spark"]["application_name"].upper()
+        return self._config["spark"]["application_name"].upper()

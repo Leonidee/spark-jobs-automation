@@ -24,7 +24,7 @@ class BaseRequestHandler:
         self._DELAY = retry_delay
         self._SESSION_TIMEOUT = session_timeout
 
-        self.config = Config(config_name="config.yaml")
+        self.config = Config(config_path="/opt/airflow/config/config.yaml")
 
     @property
     def max_retries(self) -> int:

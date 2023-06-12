@@ -43,7 +43,7 @@ class SparkHelper:
     )
 
     def __init__(self) -> None:
-        self.config = Config("config.yaml")
+        self.config = Config(config_name="config.yaml")
 
         self.logger = SparkLogger().get_logger(name=__name__)
 
