@@ -129,9 +129,6 @@ class SparkSubmitter(BaseRequestHandler):
 
                     continue
 
-        self.logger.debug("Request sent")
-        self.logger.info("Job in progress on Cluster side...")
-
         if response.status_code == 200:  # type: ignore
             self.logger.debug("Response received")
 
@@ -144,7 +141,9 @@ class SparkSubmitter(BaseRequestHandler):
                 raise UnableToGetResponse(f"{str(err)}. Posible failed to submit job.")
 
             if response.get("returncode") == 2:
-                self.logger.info(f"'{job}' job was submitted successfully!")
+                self.logger.info(
+                    f"'{job}' job was submitted successfully! Results stored -> {keeper.tgt_path}"
+                )
 
                 self.logger.debug(f"Job stdout:\n{response.get('stdout')}")
                 self.logger.debug(f"Job stderr:\n{response.get('stderr')}")

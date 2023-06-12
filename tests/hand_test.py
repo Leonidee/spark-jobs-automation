@@ -2,21 +2,22 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from src.config import Config
-from src.logger import SparkLogger
+from src.keeper import ArgsKeeper
+from src.submitter import SparkSubmitter
 
 
 def main() -> ...:
-    import os
+    keeper = ArgsKeeper(
+        date="2022-04-26",
+        depth=10,
+        src_path="s3a://data-ice-lake-05/messager-data/analytics/geo-events",
+        tgt_path="s3a://data-ice-lake-05/messager-data/analytics/tmp",
+        coords_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates",
+        processed_dttm="2023-05-22T12:03:25",
+    )
 
-    conf = Config(config_name="config.yaml")
-    print(conf.environ)
-
-    conf.environ = "testing"
-    print(conf.environ)
-
-    conf.environ = "airflow"
-    print(conf.environ)
+    spark = SparkSubmitter()
+    spark.submit_job(job="collect_users_demographic_dm_job", keeper=keeper)
 
 
 if __name__ == "__main__":

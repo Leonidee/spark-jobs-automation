@@ -1,7 +1,7 @@
 environ:
   is_prod: true
   # Type of current evironment
-  # Can be one of: ``dataproc``, ``airflow``, ``supervisor``, ``testing``
+  # Can be one of: ``dataproc``, ``airflow``, ``testing``
   type: airflow
 
 logging:
