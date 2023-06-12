@@ -91,11 +91,22 @@ class SparkSubmitter(BaseRequestHandler):
         """Sends request to API to submit Spark job in Hadoop Cluster.
 
         ## Parameters
-        `job` : Spark Job name to submit
-        `keeper` : `ArgsKeeper` object with job arguments
+        `job` : `Literal[str]`
+            Name of submitting job
+        `keeper` : `ArgsKeeper`
+            Instance with Job arguments
 
         ## Returns
-        `bool` : Returns True if success
+        `bool` :
+            True if jobs was submitted successfully
+
+        ## Raises
+        `UnableToSendRequest` :
+            If unable to send request to Cluster
+        `UnableToGetResponse` :
+            If unable to get or decode response
+        `UnableToSubmitJob` :
+            If operation failed while execution in Cluster
         """
         self.logger.info(f"Submiting '{job}' job")
 
