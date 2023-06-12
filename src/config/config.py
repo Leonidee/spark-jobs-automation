@@ -87,7 +87,10 @@ class Config:
         if not isinstance(name, str):
             raise ValueError("config name must be string type")
         if not re.match(pattern=r"^\w+\.ya?ml$", string=name):
-            raise ValueError("invalid config file extention, must be 'yml' or 'yaml'")
+            raise ValueError(
+                "Invalid config file extention, config must be an yaml file"
+                "with 'yml' or 'yaml' extention respectively"
+            )
 
         return True
 
@@ -104,7 +107,7 @@ class Config:
 
     @property
     def IS_PROD(self) -> bool:
-        return self.config["environ"]["is_prod"]
+        return bool(self.config["environ"]["is_prod"])
 
     @property
     def get_job_config(
@@ -113,7 +116,7 @@ class Config:
         return self.config["spark"]["jobs"]
 
     @property
-    def get_logging_level(self) -> Dict:
+    def get_logging_level(self) -> Dict[str, str | int | date]:
         return {k: v.upper() for k, v in self.config["logging"]["level"].items()}
 
     @property

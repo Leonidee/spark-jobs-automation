@@ -8,11 +8,14 @@ from fastapi import FastAPI
 # package
 sys.path.append(str(Path(__file__).parent.parent))
 from src.keeper import ArgsKeeper
+from src.logger import SparkLogger
 
 app = FastAPI()
 
 SPARK_SUBMIT_EXEC = "/usr/bin/spark-submit"
 PROJECT_PATH = str(Path(__file__).parent.parent)
+
+logger = SparkLogger().get_logger(name=__name__)
 
 JOBS = (
     "collect_users_demographic_dm_job",

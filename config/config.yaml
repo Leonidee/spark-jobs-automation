@@ -1,5 +1,5 @@
 environ:
-  is_prod: false
+  is_prod: true
 
 logging:
   level:

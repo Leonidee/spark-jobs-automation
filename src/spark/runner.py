@@ -8,7 +8,6 @@ import findspark
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
-
 from src.helper import SparkHelper
 from src.logger import SparkLogger
 

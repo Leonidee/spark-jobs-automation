@@ -12,7 +12,9 @@ from src.keeper import ArgsKeeper, SparkConfigKeeper
 from src.logger import SparkLogger
 from src.spark import DatamartCollector
 
-config = Config(config_name="config.yaml")
+config = Config(
+    config_path=Path(Path.home(), "code/spark-jobs-automation/config/config.yaml")
+)
 
 logger = SparkLogger().get_logger(name=__name__)
 
