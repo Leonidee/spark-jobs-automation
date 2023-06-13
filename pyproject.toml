@@ -14,7 +14,7 @@ boto3 = "1.26.117"
 python-dotenv = "1.0.0"
 pyyaml = "6.0"
 
-[tool.poetry.group.cluster.dependencies]
+[tool.poetry.group.dataproc.dependencies]
 python = "3.8"
 fastapi = "0.95.1"
 uvicorn = {extras = ["standard"], version = "0.21.1"}
