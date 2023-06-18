@@ -17,29 +17,34 @@ from fastapi import FastAPI
 # package
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config
+from src.environ import EnvironManager
 from src.keeper import ArgsKeeper
 from src.logger import SparkLogger
 
-app = FastAPI()
+REQUIRED_VARS = ("PROJECT_PATH", "SPARK_SUBMIT_BIN")
 
-config = Config(config_path=Path(os.getenv("PROJECT_PATH"), "config/config.yaml"))  # type: ignore
+environ = EnvironManager()
+environ.check_environ(var=REQUIRED_VARS)
+environ.load_environ()
 
-SPARK_SUBMIT_EXEC = os.getenv("SPARK_SUBMIT_BIN")
-PROJECT_PATH = os.getenv("PROJECT_PATH")
+PROJECT_PATH, SPARK_SUBMIT_BIN = map(os.getenv, REQUIRED_VARS)
+
 JOBS = (
     "collect_users_demographic_dm_job",
     "collect_events_total_cnt_agg_wk_mnth_dm_job",
     "collect_add_to_friends_recommendations_dm_job",
 )
 
-
+config = Config(config_path=Path(PROJECT_PATH, "config/config.yaml"))  # type: ignore
 logger = SparkLogger(level=config.get_logging_level["python"]).get_logger(name=__name__)
+
+app = FastAPI()
 
 
 @app.post(f"/submit_{JOBS[0]}")
 def submit_collect_users_demographic_dm_job(keeper: ArgsKeeper):
     CMD = [
-        SPARK_SUBMIT_EXEC,
+        SPARK_SUBMIT_BIN,
         f"{PROJECT_PATH}/jobs/{JOBS[0]}.py",
         keeper.date,
         str(keeper.depth),
@@ -56,7 +61,7 @@ def submit_collect_users_demographic_dm_job(keeper: ArgsKeeper):
 @app.post(f"/submit_{JOBS[1]}")
 def submit_collect_events_total_cnt_agg_wk_mnth_dm_job(keeper: ArgsKeeper):
     CMD = [
-        SPARK_SUBMIT_EXEC,
+        SPARK_SUBMIT_BIN,
         f"{PROJECT_PATH}/jobs/{JOBS[1]}.py",
         keeper.date,
         str(keeper.depth),
@@ -73,7 +78,7 @@ def submit_collect_events_total_cnt_agg_wk_mnth_dm_job(keeper: ArgsKeeper):
 @app.post(f"/submit_{JOBS[2]}")
 def submit_collect_add_to_friends_recommendations_dm_job(keeper: ArgsKeeper):
     CMD = [
-        SPARK_SUBMIT_EXEC,
+        SPARK_SUBMIT_BIN,
         f"{PROJECT_PATH}/jobs/{JOBS[2]}.py",
         keeper.date,
         str(keeper.depth),

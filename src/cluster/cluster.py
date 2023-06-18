@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import os
 import re
 import sys
 import time
 from logging import getLogger
+from os import environ, getenv
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,7 +25,6 @@ from requests.exceptions import (
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.base import BaseRequestHandler
 from src.cluster.exceptions import YandexAPIError
-from src.environ import EnvironManager
 from src.logger import SparkLogger
 
 
@@ -57,7 +56,10 @@ class DataProcCluster(BaseRequestHandler):
     ... [2023-05-26 12:59:39] {src.cluster.cluster:165} INFO: The target status has been reached!
     """
 
-    __slots__ = ("_CLUSTER_ID", "_BASE_URL", "_OAUTH_TOKEN", "_IAM_TOKEN", "logger")
+    __slots__ = (
+        "_IAM_TOKEN",
+        "logger",
+    )
 
     def __init__(
         self,
@@ -74,28 +76,15 @@ class DataProcCluster(BaseRequestHandler):
         self.logger = (
             getLogger("aiflow.task")
             if self.config.environ == "airflow"
-            else SparkLogger().get_logger(name=__name__)
+            else SparkLogger(level=self.config.get_logging_level["python"]).get_logger(
+                name=__name__
+            )
         )
 
-        environ = EnvironManager()
-        environ.load_environ()
-
-        _REQUIRED_VARS = (
-            "YC_DATAPROC_CLUSTER_ID",
-            "YC_DATAPROC_BASE_URL",
-            "YC_OAUTH_TOKEN",
-            "YC_IAM_TOKEN",
-        )
-        environ.check_environ(var=_REQUIRED_VARS[:3])  # type: ignore
-
-        self._CLUSTER_ID, self._BASE_URL, self._OAUTH_TOKEN = map(
-            os.getenv, _REQUIRED_VARS[:3]
-        )
-
-        if _REQUIRED_VARS[3] not in os.environ:
+        if "YC_IAM_TOKEN" not in environ:
             self._get_iam_token()
 
-        self._IAM_TOKEN = os.getenv(_REQUIRED_VARS[3])
+        self._IAM_TOKEN = getenv("YC_IAM_TOKEN")
 
     def _get_iam_token(self) -> bool:  # type: ignore
         """
@@ -159,7 +148,7 @@ class DataProcCluster(BaseRequestHandler):
 
                     # fmt: on
                     self.logger.debug("IAM token collected")
-                    os.environ["YC_IAM_TOKEN"] = response[token_key]
+                    environ["YC_IAM_TOKEN"] = response[token_key]
 
                     return True
 

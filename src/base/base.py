@@ -1,17 +1,29 @@
 from __future__ import annotations
 
 import sys
+from os import getenv
 from pathlib import Path
 
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.config import Config
+from src.environ import EnvironManager
 
 
 class BaseRequestHandler:
     """Base Requests handler class. Contains basic attributes. Must be inherited by other classes."""
 
-    __slots__ = "_MAX_RETRIES", "_DELAY", "_SESSION_TIMEOUT", "config"
+    __slots__ = (
+        "_MAX_RETRIES",
+        "_DELAY",
+        "_SESSION_TIMEOUT",
+        "_CLUSTER_ID",
+        "_BASE_URL",
+        "_OAUTH_TOKEN",
+        "_IAM_TOKEN",
+        "_CLUSTER_API_BASE_URL",
+        "config",
+    )
 
     def __init__(
         self,
@@ -24,7 +36,28 @@ class BaseRequestHandler:
         self._DELAY = retry_delay
         self._SESSION_TIMEOUT = session_timeout
 
-        self.config = Config(config_path="/opt/airflow/config/config.yaml")
+        env_man = EnvironManager()
+        env_man.load_environ()
+
+        _REQUIRED_VARS = (
+            "YC_DATAPROC_CLUSTER_ID",
+            "YC_DATAPROC_BASE_URL",
+            "YC_OAUTH_TOKEN",
+            "CLUSTER_API_BASE_URL",
+            "PROJECT_PATH",
+        )
+        env_man.check_environ(var=_REQUIRED_VARS)
+
+        (
+            self._CLUSTER_ID,
+            self._BASE_URL,
+            self._OAUTH_TOKEN,
+            self._CLUSTER_API_BASE_URL,
+        ) = map(getenv, _REQUIRED_VARS[:4])
+
+        self.config = Config(
+            config_path=Path(getenv("PROJECT_PATH"), "config/config.yaml")  # type: ignore
+        )
 
     @property
     def max_retries(self) -> int:

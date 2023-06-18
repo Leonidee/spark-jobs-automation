@@ -22,7 +22,7 @@ from src.spark.runner import SparkRunner
 
 
 class DatamartCollector(SparkRunner):
-    __slots__ = "logger"
+    __slots__ = ("logger",)
 
     def __init__(self) -> None:
         super().__init__()

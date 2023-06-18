@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import os
 import sys
 import time
-from enum import Enum
 from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -21,7 +19,6 @@ from requests.exceptions import (
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.base import BaseRequestHandler
-from src.environ import EnvironManager
 from src.logger import SparkLogger
 from src.submitter.exceptions import (
     UnableToGetResponse,
@@ -51,7 +48,7 @@ class SparkSubmitter(BaseRequestHandler):
     >>> submitter.submit_job(job="users_info_datamart_job", keeper=keeper)
     """
 
-    __slots__ = "logger", "_CLUSTER_API_BASE_URL"
+    __slots__ = ("logger",)
 
     def __init__(
         self,
@@ -76,16 +73,10 @@ class SparkSubmitter(BaseRequestHandler):
         self.logger = (
             getLogger("aiflow.task")
             if self.config.environ == "airflow"
-            else SparkLogger().get_logger(name=__name__)
+            else SparkLogger(level=self.config.get_logging_level["python"]).get_logger(
+                name=__name__
+            )
         )
-
-        environ = EnvironManager()
-        environ.load_environ()
-
-        _REQUIRED_VAR = "CLUSTER_API_BASE_URL"
-        environ.check_environ(var=_REQUIRED_VAR)
-
-        self._CLUSTER_API_BASE_URL = os.getenv(_REQUIRED_VAR)
 
     def submit_job(self, job: Literal["collect_users_demographic_dm_job", "collect_events_total_cnt_agg_wk_mnth_dm_job", "collect_add_to_friends_recommendations_dm_job"], keeper: ArgsKeeper) -> bool:  # type: ignore
         """Sends request to API to submit Spark job in Hadoop Cluster.

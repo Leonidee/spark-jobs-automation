@@ -6,9 +6,6 @@ from pathlib import Path
 
 from coloredlogs import ColoredFormatter, install
 
-sys.path.append(str(Path(__file__).parent.parent))
-from src.config import Config
-
 
 class SparkLogger(Logger):
     """Python Logger instance.
@@ -25,14 +22,10 @@ class SparkLogger(Logger):
     [2023-05-24 17:32:16] {src.utils.environ:4} INFO: This is a test!
     """
 
-    __slots__ = ("config", "_level")
+    __slots__ = ("_level",)
 
-    def __init__(self, level: str | None = None):
-        if not level:
-            self.config = Config(config_name="config.yaml")
-            self._level = self.config.get_logging_level["python"]  # type: ignore
-        else:
-            self._level = level
+    def __init__(self, level: str) -> None:
+        self._level = level
 
     def get_logger(self, name: str) -> Logger:
         """Returns configured ready-for-use logger instance

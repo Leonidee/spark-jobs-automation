@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import os
 import sys
 from datetime import datetime, timedelta
+from os import getenv
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -26,7 +26,7 @@ from src.logger import SparkLogger
 
 
 class SparkHelper:
-    """Helper class for Apache Spark"""
+    """Helper class for Apache Spark runtime"""
 
     __slots__ = (
         "config",
@@ -35,24 +35,9 @@ class SparkHelper:
         "AWS_ENDPOINT_URL",
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
-        "HADOOP_CONF_DIR",
-        "YARN_CONF_DIR",
-        "JAVA_HOME",
-        "SPARK_HOME",
-        "PYTHON_PATH",
     )
 
     def __init__(self) -> None:
-        self.config = Config(
-            config_path=Path(
-                Path.home(), "code/spark-jobs-automation/config/config.yaml"
-            )
-        )
-
-        self.logger = SparkLogger(
-            level=self.config.get_logging_level["python"]
-        ).get_logger(name=__name__)
-
         environ = EnvironManager()
         environ.load_environ()
 
@@ -60,25 +45,23 @@ class SparkHelper:
             "AWS_ENDPOINT_URL",
             "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY",
-            "HADOOP_CONF_DIR",
-            "YARN_CONF_DIR",
-            "JAVA_HOME",
-            "SPARK_HOME",
-            "PYTHON_PATH",
+            "PROJECT_PATH",
         )
 
         environ.check_environ(var=_REQUIRED_VARS)
-
         (
             self.AWS_ENDPOINT_URL,
             self.AWS_ACCESS_KEY_ID,
             self.AWS_SECRET_ACCESS_KEY,
-            self.HADOOP_CONF_DIR,
-            self.YARN_CONF_DIR,
-            self.JAVA_HOME,
-            self.SPARK_HOME,
-            self.PYTHON_PATH,
-        ) = map(os.getenv, _REQUIRED_VARS)
+        ) = map(getenv, _REQUIRED_VARS[:3])
+
+        self.config = Config(
+            config_path=Path(getenv("PROJECT_PATH"), "config/config.yaml")  # type: ignore
+        )
+
+        self.logger = SparkLogger(
+            level=self.config.get_logging_level["python"]
+        ).get_logger(name=__name__)
 
         self.s3 = self._get_s3_instance()
 

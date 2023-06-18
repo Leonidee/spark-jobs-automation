@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -31,7 +32,10 @@ class SparkRunner(SparkHelper):
     >>> spark.stop_session()
     """
 
-    __slots__ = "logger", "spark"
+    __slots__ = (
+        "logger",
+        "spark",
+    )
 
     def __init__(self) -> None:
         super().__init__()
@@ -60,7 +64,9 @@ class SparkRunner(SparkHelper):
         """
         self.logger.info("Initializing Spark session")
 
-        findspark.init(spark_home=self.SPARK_HOME, python_path=self.PYTHON_PATH)
+        findspark.init(
+            spark_home=os.getenv("SPARK_HOME"), python_path=os.getenv("PYSPARK_PYTHON")
+        )
         findspark.find()
 
         from pyspark.sql import SparkSession  # type: ignore

@@ -47,31 +47,45 @@ fi
 
 source ~/.bashrc
 
+# Setting these to .env also. 
+# This is necessary for the proper operation of the supervisor service
+# I usee this method to work around some of the errors of supervisor
+if grep -q "^SPARK_SUBMIT_BIN=$SPARK_SUBMIT_BIN" $PROJECT_PATH/.env; then
+  :
+else
+    echo "SPARK_SUBMIT_BIN=$SPARK_SUBMIT_BIN" >> $PROJECT_PATH/.env
+fi
+if grep -q "^PROJECT_PATH=$PROJECT_PATH" $PROJECT_PATH/.env; then
+  :
+else
+    echo "PROJECT_PATH=$PROJECT_PATH" >> $PROJECT_PATH/.env
+fi
+
 PYSPARK_PYTHON=${PYSPARK_PYTHON:-$(which python)}
 
 $PYSPARK_PYTHON -m pip install --upgrade pip
 
-# # Instaling packages
-# if command -v apt > /dev/null; then
-#   sudo apt update
-#   sudo apt upgrade -y
-#   if command -v supervisorctl > /dev/null; then
-#     echo "supervisor is already installed"
-#   else
-#     sudo apt install -y supervisor
-#   fi
-# elif command -v apt-get > /dev/null; then
-#   sudo apt-get update
-#   sudo apt-get upgrade -y
-#   if command -v supervisorctl > /dev/null; then
-#     echo "supervisor is already installed"
-#   else
-#     sudo apt-get install -y supervisor
-#   fi
-# else
-#   echo "Unsupported operating system"
-#   exit 1
-# fi
+# Instaling packages
+if command -v apt > /dev/null; then
+  sudo apt update
+  sudo apt upgrade -y
+  if command -v supervisorctl > /dev/null; then
+    echo "supervisor is already installed"
+  else
+    sudo apt install -y supervisor
+  fi
+elif command -v apt-get > /dev/null; then
+  sudo apt-get update
+  sudo apt-get upgrade -y
+  if command -v supervisorctl > /dev/null; then
+    echo "supervisor is already installed"
+  else
+    sudo apt-get install -y supervisor
+  fi
+else
+  echo "Unsupported OS. Please, manually install supervisor"
+  exit 1
+fi
 
 # Parse the dependencies from the pyproject.toml file and install it
 while IFS='=' read -r key value; do

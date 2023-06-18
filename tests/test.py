@@ -7,7 +7,7 @@ from src.config import Config
 
 
 def main():
-    config = Config(config_path=Path(os.getenv("PROJECT_PATH"), "config/config.yaml"))
+    print(os.getenv("PYSPARK_PYTHON"))
 
 
 if __name__ == "__main__":
