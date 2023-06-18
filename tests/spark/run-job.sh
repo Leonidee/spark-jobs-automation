@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 # this is a scrpit for testing spark-submit operation on cluster side
 # in manual mode only, not for automate testing
 # the only argument is name of job

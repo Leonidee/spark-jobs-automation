@@ -60,7 +60,7 @@ class SparkRunner(SparkHelper):
         """
         self.logger.info("Initializing Spark session")
 
-        findspark.init(spark_home=self.SPARK_HOME, python_path=self.PYTHONPATH)
+        findspark.init(spark_home=self.SPARK_HOME, python_path=self.PYTHON_PATH)
         findspark.find()
 
         from pyspark.sql import SparkSession  # type: ignore

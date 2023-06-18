@@ -528,6 +528,8 @@ class DatamartCollector(SparkRunner):
 
         sdf = self.spark.createDataFrame(sdf.rdd, schema=_SCHEMA)
 
+        sdf.show(100)
+
         self.logger.info(f"Datamart '{_DATAMART_NAME}' collected!")
 
         self.logger.info("Writing results")

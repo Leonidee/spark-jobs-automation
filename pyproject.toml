@@ -4,7 +4,6 @@ version = "0.1.0"
 description = ""
 authors = ["leonidee"]
 readme = "README.md"
-packages = [{include = "spark-jobs-automation"}]
 
 [tool.poetry.group.airflow.dependencies]
 python = "^3.10"

@@ -39,7 +39,7 @@ class SparkHelper:
         "YARN_CONF_DIR",
         "JAVA_HOME",
         "SPARK_HOME",
-        "PYTHONPATH",
+        "PYTHON_PATH",
     )
 
     def __init__(self) -> None:
@@ -64,7 +64,7 @@ class SparkHelper:
             "YARN_CONF_DIR",
             "JAVA_HOME",
             "SPARK_HOME",
-            "PYTHONPATH",
+            "PYTHON_PATH",
         )
 
         environ.check_environ(var=_REQUIRED_VARS)
@@ -77,7 +77,7 @@ class SparkHelper:
             self.YARN_CONF_DIR,
             self.JAVA_HOME,
             self.SPARK_HOME,
-            self.PYTHONPATH,
+            self.PYTHON_PATH,
         ) = map(os.getenv, _REQUIRED_VARS)
 
         self.s3 = self._get_s3_instance()

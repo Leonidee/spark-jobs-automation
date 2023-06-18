@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,17 +22,17 @@ from src.logger import SparkLogger
 
 app = FastAPI()
 
-SPARK_SUBMIT_EXEC = "/usr/bin/spark-submit"
-PROJECT_PATH = str(Path(__file__).parent.parent)
+config = Config(config_path=Path(os.getenv("PROJECT_PATH"), "config/config.yaml"))  # type: ignore
+
+SPARK_SUBMIT_EXEC = os.getenv("SPARK_SUBMIT_BIN")
+PROJECT_PATH = os.getenv("PROJECT_PATH")
 JOBS = (
     "collect_users_demographic_dm_job",
     "collect_events_total_cnt_agg_wk_mnth_dm_job",
     "collect_add_to_friends_recommendations_dm_job",
 )
 
-config = Config(
-    config_path=Path(Path.home(), "code/spark-jobs-automation/config/config.yaml")
-)
+
 logger = SparkLogger(level=config.get_logging_level["python"]).get_logger(name=__name__)
 
 
