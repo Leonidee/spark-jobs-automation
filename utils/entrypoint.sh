@@ -3,10 +3,11 @@
 # Usage:
 #   $ ./utils/entrypoint.sh dataproc      # for DataProc cluster configuration 
 #   $ ./utils/entrypoint.sh airflow       # for configuration host where Airflow will be deployed
+#   $ ./utils/entrypoint.sh dev           #
 # 
 
 if [ -z "$1" ]; then
-  echo "Usage: $0 [dataproc|airflow]"
+  echo "Usage: $0 [dataproc|airflow|dev]"
   exit 1
 fi
 
@@ -17,8 +18,11 @@ case "$1" in
   "airflow")
     echo "Setting up airflow environment"
     ;;
+  "dev")
+    echo "Setting up development environment"
+    ;;
   *)
-    echo "Unknown mode: $1. Usage: $0 [dataproc|airflow]"
+    echo "Unknown mode: $1. Usage: $0 [dataproc|airflow|dev]"
     exit 1
     ;;
 esac
@@ -65,7 +69,7 @@ PYSPARK_PYTHON=${PYSPARK_PYTHON:-$(which python)}
 
 $PYSPARK_PYTHON -m pip install --upgrade pip
 
-# Instaling packages
+# Instaling supervisor
 if command -v apt > /dev/null; then
   sudo apt update
   sudo apt upgrade -y
@@ -161,5 +165,84 @@ fi
 
 
 elif [[ "$ENVIRON" == "airflow" ]]; then
+
+echo "PROJECT_PATH=/opt/airflow" >> ./.env
+
+if [ -d "./logs" ]; then
+  :
+else
+  mkdir "./logs"
+fi
+if [ -d "./plugins" ]; then
+  :
+else
+  mkdir "./plugins"
+fi
+
+if test -f "requirements.txt"; then
+    rm "requirements.txt"
+fi
+touch requirements.txt
+
+while IFS='=' read -r key value; do
+  if [[ $key == *"["* ]]; then
+    section=$(echo $key | tr -d '[]')
+  elif [[ $key != "" ]]; then
+    if [[ $section == "tool.poetry.group.airflow.dependencies" ]]; then
+        package=$(echo $key | tr -d '[:space:]')
+        version=$(echo $value | tr -d '[:space:]"')
+      if [[ $package != "python" ]]; then
+          echo $package==$version >> requirements.txt
+      fi
+    fi
+  fi
+done < pyproject.toml
+
+if test -f "Dockerfile"; then
+    rm "Dockerfile"
+fi
+touch Dockerfile
+
+cat <<EOF > "Dockerfile"
+FROM apache/airflow:2.6.2-python3.11
+
+USER airflow
+
+COPY ./requirements.txt .
+
+RUN pip install --no-cache-dir --upgrade pip
+
+RUN pip install --no-cache-dir -r ./requirements.txt
+EOF
+
+# Instaling docker
+if command -v apt > /dev/null; then
+  # sudo apt update
+  # sudo apt upgrade -y
+  if command -v docker > /dev/null; then 
+    echo "docker is already installed"
+  else
+    echo "Installing docker"
+  fi
+elif command -v apt-get > /dev/null; then
+  # sudo apt-get update
+  # sudo apt-get upgrade -y
+  if command -v docker > /dev/null; then
+    echo "docker is already installed"
+  else
+    echo "Installing docker"
+  fi
+else
+  echo "Unsupported OS. Please, manually install docker"
+  exit 1
+fi
+
+docker compose up airflow-init
+
+docker compose up -d
+
+rm "requirements.txt"
+
+elif [[ "$ENVIRON" == "dev" ]]; then
 echo "some logic here"
 fi
