@@ -7,7 +7,7 @@ from src.config import Config
 
 
 def main():
-    print(os.getenv("PYSPARK_PYTHON"))
+    print(sys.version_info)
 
 
 if __name__ == "__main__":

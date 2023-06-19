@@ -1,10 +1,12 @@
 [tool.poetry]
 name = "spark-jobs-automation"
 authors = ["leonidee"]
+version = "0.1.0"
+description = ""
 readme = "README.md"
 
 [tool.poetry.group.airflow.dependencies]
-python = "3.10"
+python = "3.11"
 requests = "2.28.2"
 coloredlogs = "15.0.1"
 boto3 = "1.26.117"
@@ -23,12 +25,15 @@ python-dotenv = "1.0.0"
 pyyaml = "6.0"
 
 [tool.poetry.group.dev.dependencies]
-pyspark = "3.2.1"
-ipykernel = "6.22.0"
-pandas = "2.0.1"
-pyarrow = "11.0.0"
+python = "3.11.2"
+coloredlogs = "15.0.1"
+boto3 = "1.26.117"
+requests = "2.28.2"
+python-dotenv = "1.0.0"
+pyyaml = "6.0"
 
 [tool.poetry.group.test.dependencies]
+python = "3.11.2"
 pytest = "7.3.1"
 
 [build-system]

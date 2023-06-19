@@ -91,7 +91,7 @@ else
   exit 1
 fi
 
-# Parse the dependencies from the pyproject.toml file and install it
+# Parse the Cluster dependencies from the pyproject.toml file and install it
 while IFS='=' read -r key value; do
   if [[ $key == *"["* ]]; then
     section=$(echo $key | tr -d '[]')
@@ -166,7 +166,26 @@ fi
 
 elif [[ "$ENVIRON" == "airflow" ]]; then
 
-echo "PROJECT_PATH=/opt/airflow" >> ./.env
+
+if grep -q "^PROJECT_PATH=/opt/airflow" ./.env; then
+  :
+elif grep -q "^PROJECT_PATH=.*" ./.env; then
+  sed -i "s|^PROJECT_PATH=.*|PROJECT_PATH=/opt/airflow|" ./.env
+else
+  echo -e "PROJECT_PATH=/opt/airflow\n" >> ./.env
+fi
+
+if grep -q "^AIRFLOW_UID=.*" ./.env; then
+  :
+else
+  echo -e "AIRFLOW_UID=$(id -u)\n" >> ./.env
+fi
+
+if grep -q "^AIRFLOW_GID=.*" ./.env; then
+  :
+else
+  echo -e "AIRFLOW_GID=0\n" >> ./.env
+fi
 
 if [ -d "./logs" ]; then
   :
@@ -184,6 +203,9 @@ if test -f "requirements.txt"; then
 fi
 touch requirements.txt
 
+# Parse Airflow dependencies from pyproject.toml
+# and store it in requirements.txt that will be used
+# to build Airlfow Docker containers
 while IFS='=' read -r key value; do
   if [[ $key == *"["* ]]; then
     section=$(echo $key | tr -d '[]')
@@ -203,39 +225,66 @@ if test -f "Dockerfile"; then
 fi
 touch Dockerfile
 
+# Creating Dockerfile
 cat <<EOF > "Dockerfile"
 FROM apache/airflow:2.6.2-python3.11
 
-USER airflow
+ENV AIRFLOW_HOME=/opt/airflow
 
 COPY ./requirements.txt .
 
 RUN pip install --no-cache-dir --upgrade pip
 
 RUN pip install --no-cache-dir -r ./requirements.txt
+
+USER airflow
+WORKDIR ${AIRFLOW_HOME}
 EOF
 
 # Instaling docker
 if command -v apt > /dev/null; then
-  # sudo apt update
-  # sudo apt upgrade -y
+  sudo apt update
+  sudo apt upgrade -y
   if command -v docker > /dev/null; then 
     echo "docker is already installed"
   else
     echo "Installing docker"
+    sudo apt install -y ca-certificates curl gnupg
+    sudo install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    sudo chmod a+r /etc/apt/keyrings/docker.gpg
+    echo "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+      "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+      sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    
+    sudo apt update
+    sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   fi
 elif command -v apt-get > /dev/null; then
-  # sudo apt-get update
-  # sudo apt-get upgrade -y
+  sudo apt-get update
+  sudo apt-get upgrade -y
   if command -v docker > /dev/null; then
     echo "docker is already installed"
   else
     echo "Installing docker"
+    sudo apt-get install -y ca-certificates curl gnupg
+    sudo install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    sudo chmod a+r /etc/apt/keyrings/docker.gpg
+    echo "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+      "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+      sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    
+    sudo apt-get update
+    sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   fi
 else
   echo "Unsupported OS. Please, manually install docker"
   exit 1
 fi
+
+# Up docker containers
+docker compose build
 
 docker compose up airflow-init
 
@@ -244,5 +293,13 @@ docker compose up -d
 rm "requirements.txt"
 
 elif [[ "$ENVIRON" == "dev" ]]; then
-echo "some logic here"
+
+read -p "Enter a project path:  " PROJECT_PATH
+
+if grep -q "^PROJECT_PATH=.*" ./.env; then
+  sed -i "s|^PROJECT_PATH=.*|PROJECT_PATH=$PROJECT_PATH|" ./.env
+else
+  echo "PROJECT_PATH=$PROJECT_PATH\n" >> ./.env
+fi
+
 fi

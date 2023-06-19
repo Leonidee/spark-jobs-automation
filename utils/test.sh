@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 
-SPARK_SUBMIT_BIN=$(which spark-submit)
-PROJECT_PATH=/home/ubuntu/code/spark-jobs-automation
-
-echo  "SPARK_SUBMIT_BIN=$SPARK_SUBMIT_BIN" >> $PROJECT_PATH/.env
-echo  "PROJECT_PATH=$PROJECT_PATH" >> $PROJECT_PATH/.env
+while IFS='=' read -r key value; do
+  if [[ $key == *"["* ]]; then
+    section=$(echo $key | tr -d '[]')
+  elif [[ $key != "" ]]; then
+    if [[ $section == "tool.poetry.group.airflow.dependencies" ]]; then
+        package=$(echo $key | tr -d '[:space:]')
+        version=$(echo $value | tr -d '[:space:]"')
+      if [[ $package != "python" ]]; then
+          echo $package==$version >> requirements.txt
+      fi
+    fi
+  fi
+done < pyproject.toml
