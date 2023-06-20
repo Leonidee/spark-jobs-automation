@@ -1,55 +1,48 @@
 #!/usr/bin/env bash
+# 
+# This is an entry point for configuring a new environment required to deploy a project.
+# The project requires two main environments: a Dataproc cluster, host with Airflow
+# and some kind of development or testing environment, which can be either of them.
+# After running the script, you will be prompted to choose which environment you want to set up.
 #
 # Usage:
-#   $ ./utils/entrypoint.sh dataproc      # for DataProc cluster configuration 
-#   $ ./utils/entrypoint.sh airflow       # for configuration host where Airflow will be deployed
-#   $ ./utils/entrypoint.sh dev           #
+#   $ ./utils/setup-project.sh   dataproc      # for DataProc cluster configuration 
+#   $ ./utils/setup-project.sh   airflow       # for configuration host where Airflow will be deployed
+#   $ ./utils/setup-project.sh   dev           # for development and testing environment
 # 
 
-if [ -z "$1" ]; then
-  echo "Usage: $0 [dataproc|airflow|dev]"
-  exit 1
-fi
 
-case "$1" in
-  "dataproc")
-    echo "Setting up dataproc cluster environment"
-    ;;
-  "airflow")
-    echo "Setting up airflow environment"
-    ;;
-  "dev")
-    echo "Setting up development environment"
-    ;;
-  *)
-    echo "Unknown mode: $1. Usage: $0 [dataproc|airflow|dev]"
-    exit 1
-    ;;
-esac
 
-ENVIRON=$1
+function detect_shell {
+  if [[ $SHELL =~ ^.*zsh$ ]]; then
+    SHELLRC="$HOME/.zshrc"
+  elif [[ $SHELL =~ ^.*bash$ ]]; then
+    SHELLRC="$HOME/.bashrc"
+  fi
+}
 
-if [[ "$ENVIRON" == "dataproc" ]]; then
+function setup_dataproc {
+detect_shell
 
 # Setting up required environment variables
 read -p "Enter a project path:  " PROJECT_PATH
 
-if grep -q "^export PROJECT_PATH=$PROJECT_PATH" ~/.bashrc; then
-    echo "The variable PROJECT_PATH is already defined in .bashrc"
+if grep -q "^export PROJECT_PATH=$PROJECT_PATH" "$SHELLRC"; then
+    echo "The variable PROJECT_PATH is already defined in $SHELLRC"
 else
-    echo "Setting up variable PROJECT_PATH into .bashrc"
-    echo "export PROJECT_PATH=$PROJECT_PATH" >> ~/.bashrc
+    echo "Setting up variable PROJECT_PATH into $SHELLRC"
+    echo "export PROJECT_PATH=$PROJECT_PATH" >> "$SHELLRC"
 fi
 
 SPARK_SUBMIT_BIN=$(which spark-submit)
-if grep -q "^export SPARK_SUBMIT_BIN=$SPARK_SUBMIT_BIN" ~/.bashrc; then
-    echo "The variable SPARK_SUBMIT_BIN is already defined in .bashrc"
+if grep -q "^export SPARK_SUBMIT_BIN=$SPARK_SUBMIT_BIN" "$SHELLRC"; then
+    echo "The variable SPARK_SUBMIT_BIN is already defined in  $SHELLRC"
 else
-    echo "Setting up variable SPARK_SUBMIT_BIN into .bashrc"
-    echo "export SPARK_SUBMIT_BIN=$SPARK_SUBMIT_BIN" >> ~/.bashrc
+    echo "Setting up variable SPARK_SUBMIT_BIN into  $SHELLRC"
+    echo "export SPARK_SUBMIT_BIN=$SPARK_SUBMIT_BIN" >>  "$SHELLRC"
 fi
 
-source ~/.bashrc
+source "$SHELLRC"
 
 # Setting these to .env also. 
 # This is necessary for the proper operation of the supervisor service
@@ -87,7 +80,7 @@ elif command -v apt-get > /dev/null; then
     sudo apt-get install -y supervisor
   fi
 else
-  echo "Unsupported OS. Please, manually install supervisor"
+  echo "Unsupported OS. Please, manually install supervisor and re-run command"
   exit 1
 fi
 
@@ -163,9 +156,9 @@ else
     fi
 fi
 
+}
 
-elif [[ "$ENVIRON" == "airflow" ]]; then
-
+function setup_airflow {
 
 if grep -q "^PROJECT_PATH=/opt/airflow" ./.env; then
   :
@@ -192,6 +185,7 @@ if [ -d "./logs" ]; then
 else
   mkdir "./logs"
 fi
+
 if [ -d "./plugins" ]; then
   :
 else
@@ -201,6 +195,7 @@ fi
 if test -f "requirements.txt"; then
     rm "requirements.txt"
 fi
+
 touch requirements.txt
 
 # Parse Airflow dependencies from pyproject.toml
@@ -229,8 +224,6 @@ touch Dockerfile
 cat <<EOF > "Dockerfile"
 FROM apache/airflow:2.6.2-python3.11
 
-ENV AIRFLOW_HOME=/opt/airflow
-
 COPY ./requirements.txt .
 
 RUN pip install --no-cache-dir --upgrade pip
@@ -238,13 +231,14 @@ RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r ./requirements.txt
 
 USER airflow
-WORKDIR ${AIRFLOW_HOME}
+WORKDIR /opt/airflow
 EOF
 
 # Instaling docker
 if command -v apt > /dev/null; then
   sudo apt update
   sudo apt upgrade -y
+  sudo apt autoremove -y
   if command -v docker > /dev/null; then 
     echo "docker is already installed"
   else
@@ -263,6 +257,7 @@ if command -v apt > /dev/null; then
 elif command -v apt-get > /dev/null; then
   sudo apt-get update
   sudo apt-get upgrade -y
+  sudo apt-get autoremove -y
   if command -v docker > /dev/null; then
     echo "docker is already installed"
   else
@@ -279,11 +274,11 @@ elif command -v apt-get > /dev/null; then
     sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   fi
 else
-  echo "Unsupported OS. Please, manually install docker"
+  echo "Unsupported OS. Please, manually install docker and re-run command"
   exit 1
 fi
 
-# Up docker containers
+# Build image for Airflow and up containers
 docker compose build
 
 docker compose up airflow-init
@@ -292,9 +287,13 @@ docker compose up -d
 
 rm "requirements.txt"
 
-elif [[ "$ENVIRON" == "dev" ]]; then
+}
+
+function setup_dev {
+detect_shell
 
 read -p "Enter a project path:  " PROJECT_PATH
+read -p "Enter a python path:  " PYTHON_PATH
 
 if grep -q "^PROJECT_PATH=.*" ./.env; then
   sed -i "s|^PROJECT_PATH=.*|PROJECT_PATH=$PROJECT_PATH|" ./.env
@@ -302,4 +301,70 @@ else
   echo "PROJECT_PATH=$PROJECT_PATH\n" >> ./.env
 fi
 
+# Updating apt
+if command -v apt > /dev/null; then
+  echo "Updating apt"
+  sudo apt update
+  sudo apt upgrade -y
+  sudo apt autoremove -y
+elif command -v apt-get > /dev/null; then
+  echo "Updating apt-get"
+  sudo apt-get update
+  sudo apt-get upgrade -y
+  sudo apt-get autoremove -y
+fi
+
+# poetry
+if command -v poetry > /dev/null; then 
+  echo "poetry is already installed"
+else
+  echo "Installing poetry"
+  curl -sSL https://install.python-poetry.org | $PYTHON_PATH -
+fi
+
+# Setting up poetry PATH
+if grep -q '^export PATH="/home/leonide/.local/bin:$PATH"' "$SHELLRC"; then
+  :
+else
+    echo 'export PATH="/home/leonide/.local/bin:$PATH"' >> "$SHELLRC"
+fi
+
+poetry config virtualenvs.in-project true
+
+poetry env use $PYTHON_PATH
+
+poetry install --only dev,test
+
+}
+
+
+if [ -z "$1" ]; then
+  echo "Usage: $0 [dataproc|airflow|dev]"
+  exit 1
+fi
+
+case "$1" in
+  "dataproc")
+    echo "Setting up dataproc cluster environment"
+    ;;
+  "airflow")
+    echo "Setting up airflow environment"
+    ;;
+  "dev")
+    echo "Setting up development environment"
+    ;;
+  *)
+    echo "Unknown mode: $1. Usage: $0 [dataproc|airflow|dev]"
+    exit 1
+    ;;
+esac
+
+ENVIRON=$1
+
+if [[ "$ENVIRON" == "dataproc" ]]; then
+  setup_dataproc
+elif [[ "$ENVIRON" == "airflow" ]]; then
+  setup_airflow
+elif [[ "$ENVIRON" == "dev" ]]; then
+  setup_dev
 fi

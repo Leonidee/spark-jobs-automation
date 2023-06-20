@@ -1,4 +1,4 @@
-# Adapted from official docker-compose.yaml
+# Adapted from official Airflow docker-compose.yaml
 # https://airflow.apache.org/docs/apache-airflow/2.5.2/docker-compose.yaml
 #
 # Licensed to the Apache Software Foundation (ASF) under one

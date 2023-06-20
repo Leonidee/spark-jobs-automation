@@ -24,7 +24,7 @@ A Rest API service, implemented using the [Fast API](https://github.com/tiangolo
 
 S3 is the main data warehouse, providing flexibility and cost-effectiveness for data storage.
 
-ALl cloud infrastructure provided by [Yandex Cloud](https://cloud.yandex.com/en-ru/).
+All cloud infrastructure provided by [Yandex Cloud](https://cloud.yandex.com/en-ru/).
 
 # Project structure
 
@@ -59,3 +59,13 @@ This project structure appears to be organized into several directories and file
     Spark modules was tested manually in Cluster. Maybe this process will be somehow automated in future versions.
 
 - `utils`: This directory contains bash scripts for setting up the project's environment.
+
+# Deploy and usage
+
+`./utils/setup-project` - is a main entry point for configuring a new environment required to deploy a project.
+
+The project requires three main environments: a Dataproc cluster, host with Airflow and some kind of development or testing environment, which can be either of them.
+
+After running this script, you will be prompted to choose which environment you want to set up. And all of the required preperation will be done automatically.
+
+**Note**: To deploy project you need a ready-to-use Dataproc Cluster by any provider you want. I used [Yandex Data Proc](https://cloud.yandex.com/en-ru/services/data-proc).
