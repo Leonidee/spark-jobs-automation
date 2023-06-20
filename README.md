@@ -62,6 +62,8 @@ This project structure appears to be organized into several directories and file
 
 # Deploy and usage
 
+![project-setup](https://github.com/leonidee/spark-jobs-automation/blob/main/images/project-setup.gif)
+
 `./utils/setup-project` - is a main entry point for configuring a new environment required to deploy a project.
 
 The project requires three main environments: a Dataproc cluster, host with Airflow and some kind of development or testing environment, which can be either of them.
