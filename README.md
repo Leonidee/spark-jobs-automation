@@ -70,4 +70,4 @@ The project requires three main environments: a Dataproc cluster, host with Airf
 
 After running this script, you will be prompted to choose which environment you want to set up. And all of the required preperation will be done automatically.
 
-**Note**: To deploy project you need a ready-to-use Dataproc Cluster by any provider you want. I used [Yandex Data Proc](https://cloud.yandex.com/en-ru/services/data-proc).
+**Note**: To deploy project you need a ready-to-use Dataproc Cluster by any provider you want. For this project I used [Yandex Data Proc](https://cloud.yandex.com/en-ru/services/data-proc).
