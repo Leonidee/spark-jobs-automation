@@ -11,4 +11,4 @@ tgt_path="s3a://data-ice-lake-05/messager-data/analytics/tmp"
 coords_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates"
 processed_dttm="2023-05-22T12:03:25"
 
-/usr/bin/spark-submit $1 $date $depth $src_path $tgt_path $coords_path $processed_dttm 
+/usr/bin/spark-submit $1 $date $depth $src_path $tgt_path $coords_path $processed_dttm

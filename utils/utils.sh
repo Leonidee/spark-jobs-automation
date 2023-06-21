@@ -7,7 +7,7 @@ function detect_shell {
   fi
 }
 
-function setup_dataproc {
+function setup_dataproc  { 
 detect_shell
 
 # Setting up required environment variables

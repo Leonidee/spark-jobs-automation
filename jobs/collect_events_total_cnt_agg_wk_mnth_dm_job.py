@@ -1,44 +1,36 @@
 import sys
 from pathlib import Path
 
-from pyspark.sql.utils import CapturedException
+from pyspark.sql.utils import CapturedException  # type: ignore
 
 # package
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import Config, UnableToGetConfig
-from src.environ import DotEnvError, EnvironNotSet
+from src.environ import DotEnvError, EnvironManager, EnvironNotSet
 from src.helper import S3ServiceError
 from src.keeper import ArgsKeeper, SparkConfigKeeper
 from src.logger import SparkLogger
 from src.spark import DatamartCollector
 
-config = Config(
-    config_path=Path(Path.home(), "code/spark-jobs-automation/config/config.yaml")
-)
+EnvironManager().load_environ()
 
+config = Config(config_path=Path(os.getenv("PROJECT_PATH"), "config/config.yaml"))  # type: ignore
 
 logger = SparkLogger(level=config.get_logging_level["python"]).get_logger(name=__name__)
 
 
 def main() -> ...:
     try:
-        DATE = str(sys.argv[1])
-        DEPTH = int(sys.argv[2])
-        SRC_PATH = str(sys.argv[3])
-        TGT_PATH = str(sys.argv[4])
-        COORDS_PATH = str(sys.argv[5])
-        PROCESSED_DTTM = str(sys.argv[6])
-
         if len(sys.argv) > 7:
             raise IndexError("Too many arguments for job submitting! Expected 6")
 
         keeper = ArgsKeeper(
-            date=DATE,
-            depth=DEPTH,
-            src_path=SRC_PATH,
-            tgt_path=TGT_PATH,
-            coords_path=COORDS_PATH,
-            processed_dttm=PROCESSED_DTTM,
+            date=str(sys.argv[1]),
+            depth=int(sys.argv[2]),
+            src_path=str(sys.argv[3]),
+            tgt_path=str(sys.argv[4]),
+            coords_path=str(sys.argv[5]),
+            processed_dttm=str(sys.argv[6]),
         )
         if not keeper.coords_path:
             raise S3ServiceError(

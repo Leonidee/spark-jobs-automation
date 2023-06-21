@@ -1,8 +1,11 @@
+#!/usr/bin/env python
+#
 # This is an entry point for deploying a FastAPI application with Uvicorn.
 # The script defines three endpoints for submitting Spark jobs,
 # each corresponding to a different job defined in the ``jobs`` directory of the project.
 # The endpoints accept an object of``ArgsKeeper`` instance as an argument,
 # which contains the arguments needed to submiting Spark job.
+#
 
 from __future__ import annotations
 
