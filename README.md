@@ -70,8 +70,6 @@ The project requires two main environments:
 1. Dataproc cluster with at least one compute node
 2. Debian based host to deploy Airflow
 
-Also some kind of development and testing environment, which can be either of them.
-
 After running this script, you will be prompted to choose which environment you want to set up. And all of the required preperation will be done automatically.
 
 **Note**: To deploy project you need a ready-to-use Dataproc Cluster by any provider you want. For this project I used [Yandex Data Proc](https://cloud.yandex.com/en-ru/services/data-proc).
