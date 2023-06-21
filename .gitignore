@@ -4,7 +4,7 @@ logs
 plugins
 .env
 .pytest_cache
-.DS_Store
+*.DS_Store
 *.pem
 .vscode
 *.ipynb
