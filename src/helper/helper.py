@@ -6,13 +6,15 @@ from os import getenv
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import boto3
+from boto3 import client
 from botocore.exceptions import ClientError
 
 if TYPE_CHECKING:
-    from typing import Literal, Tuple
+    from datetime import date
+    from logging import Logger
+    from typing import Generator, Literal, Tuple
 
-    from botocore.client import BaseClient
+    from botocore.client import S3
 
     from src.keeper import ArgsKeeper
 
@@ -38,7 +40,7 @@ class SparkHelper:
     )
 
     def __init__(self) -> None:
-        environ = EnvironManager()
+        environ: EnvironManager = EnvironManager()
         environ.load_environ()
 
         _REQUIRED_VARS = (
@@ -55,22 +57,22 @@ class SparkHelper:
             self.AWS_SECRET_ACCESS_KEY,
         ) = map(getenv, _REQUIRED_VARS[:3])
 
-        self.config = Config(
+        self.config: Config = Config(
             config_path=Path(getenv("PROJECT_PATH"), "config/config.yaml")  # type: ignore
         )
 
-        self.logger = SparkLogger(
+        self.logger: Logger = SparkLogger(
             level=self.config.get_logging_level["python"]
         ).get_logger(name=__name__)
 
         self.s3 = self._get_s3_instance()
 
-    def _get_s3_instance(self) -> BaseClient:
+    def _get_s3_instance(self) -> S3:
         "Gets ready-to-use boto3 connection instance for communication with s3 service"
 
         self.logger.debug("Getting boto3 instance")
 
-        s3 = boto3.session.Session().client(  # type: ignore
+        s3: S3 = client(  # type: ignore
             service_name="s3",
             endpoint_url=self.AWS_ENDPOINT_URL,
             aws_access_key_id=self.AWS_ACCESS_KEY_ID,
@@ -132,7 +134,7 @@ class SparkHelper:
 
         if type == "object":
             try:
-                response = self.s3.list_objects_v2(
+                response: dict = self.s3.list_objects_v2(
                     Bucket=key.split(sep="/")[2],
                     MaxKeys=1,
                     Prefix="/".join(key.split(sep="/")[3:]),
@@ -202,9 +204,9 @@ class SparkHelper:
         self.logger.debug(f"Collecting src paths for '{event_type}' event type")
         self.logger.debug(f"Source path: '{keeper.src_path}'")
 
-        date = datetime.strptime(keeper.date, r"%Y-%m-%d").date()
+        date: date = datetime.strptime(keeper.date, r"%Y-%m-%d").date()
 
-        paths = (
+        paths: Generator = (
             f"{keeper.src_path}/event_type={event_type}/date="
             + str(date - timedelta(days=i))
             for i in range(int(keeper.depth))
@@ -212,7 +214,7 @@ class SparkHelper:
 
         self.logger.debug("Checking if each path exists on S3")
 
-        existing_paths = set()
+        existing_paths: set = set()
 
         for path in paths:
             if self.check_s3_object_existence(key=path, type="object"):

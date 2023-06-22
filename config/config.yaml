@@ -7,8 +7,8 @@ environ:
   # Actualy not used in current version
   is_prod: true
   # Type of current evironment
-  # Can be one of: ``dataproc``, ``airflow``, ``testing``
-  type: dataproc
+  # Can be one of: ``dataproc``, ``airflow``, ``dev``
+  type: dev
 
 logging:
   level:
@@ -29,20 +29,20 @@ spark:
     collect_users_demographic_dm_job:
       date: 2022-04-26
       depth: 10
-      src_path: s3a://data-ice-lake-05/messager-data/analytics/geo-events
-      tgt_path: s3a://data-ice-lake-05/messager-data/analytics/tmp
-      coords_path: s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates
+      src_path: s3a://data-ice-lake-05/master/data/source/messenger-yp/events
+      tgt_path: s3a://data-ice-lake-05/prod/cdm/messenger-yp
+      coords_path: s3a://data-ice-lake-05/prod/dictionary/messenger-yp/cities-coordinates-dict
 
     collect_events_total_cnt_agg_wk_mnth_dm_job:
       date: 2022-04-26
       depth: 10
-      src_path: s3a://data-ice-lake-05/messager-data/analytics/geo-events
-      tgt_path: s3a://data-ice-lake-05/messager-data/analytics/tmp
-      coords_path: s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates
+      src_path: s3a://data-ice-lake-05/master/data/source/messenger-yp/events
+      tgt_path: s3a://data-ice-lake-05/prod/cdm/messenger-yp
+      coords_path: s3a://data-ice-lake-05/prod/dictionary/messenger-yp/cities-coordinates-dict
 
     collect_add_to_friends_recommendations_dm_job:
       date: 2022-04-26
       depth: 10
-      src_path: s3a://data-ice-lake-05/messager-data/analytics/geo-events
-      tgt_path: s3a://data-ice-lake-05/messager-data/analytics/tmp
-      coords_path: s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates
+      src_path: s3a://data-ice-lake-05/master/data/source/messenger-yp/events
+      tgt_path: s3a://data-ice-lake-05/prod/cdm/messenger-yp
+      coords_path: s3a://data-ice-lake-05/prod/dictionary/messenger-yp/cities-coordinates-dict

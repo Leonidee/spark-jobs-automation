@@ -1,12 +1,18 @@
 [tool.poetry]
 name = "spark-jobs-automation"
-authors = ["leonidee"]
 version = "0.1.0"
-description = ""
+description = "Automate Apache Spark with Airflow in Cloud"
+repository = "https://github.com/leonidee/spark-jobs-automation"
+authors = [
+    "Grishenkov Leonid <grishenkovleonid@gmail.com>"
+]
+license = "MIT"
 readme = "README.md"
 
+[tool.poetry.dependencies]
+python = "^3.8"
+
 [tool.poetry.group.airflow.dependencies]
-python = "3.11"
 requests = "2.28.2"
 coloredlogs = "15.0.1"
 boto3 = "1.26.117"
@@ -14,7 +20,6 @@ python-dotenv = "1.0.0"
 pyyaml = "6.0"
 
 [tool.poetry.group.dataproc.dependencies]
-python = "3.8"
 fastapi = "0.95.1"
 uvicorn = {extras = ["standard"], version = "0.21.1"}
 findspark = "2.0.1"
@@ -25,15 +30,14 @@ python-dotenv = "1.0.0"
 pyyaml = "6.0"
 
 [tool.poetry.group.dev.dependencies]
-python = "3.11.2"
 coloredlogs = "15.0.1"
 boto3 = "1.26.117"
 requests = "2.28.2"
 python-dotenv = "1.0.0"
 pyyaml = "6.0"
+tqdm = "4.65.0"
 
-[tool.poetry.group.test.dependencies]
-python = "3.11.2"
+[tool.poetry.group.testing.dependencies]
 pytest = "7.3.1"
 
 [build-system]
