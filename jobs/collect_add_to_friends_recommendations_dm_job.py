@@ -1,5 +1,5 @@
-import os
 import sys
+from os import getenv
 from pathlib import Path
 
 from pyspark.sql.utils import CapturedException  # type: ignore
@@ -15,7 +15,7 @@ from src.spark import DatamartCollector
 
 EnvironManager().load_environ()
 
-config = Config(config_path=Path(os.getenv("PROJECT_PATH"), "config/config.yaml"))  # type: ignore
+config = Config(config_path=Path(getenv("PROJECT_PATH"), "config/config.yaml"))  # type: ignore
 
 logger = SparkLogger(level=config.get_logging_level["python"]).get_logger(name=__name__)
 
