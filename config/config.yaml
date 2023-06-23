@@ -1,29 +1,25 @@
 # Main configuration file of project
 # Will be parsed by ``Config`` class instances
 # and used accross all modules
-
 environ:
   # If we on production environment
   # Actualy not used in current version
   is_prod: true
   # Type of current evironment
   # Can be one of: ``dataproc``, ``airflow``, ``dev``
-  type: dev
-
+  type: dataproc
 logging:
   level:
     # Python logging level used inside project's modules
     # This does not take affect on Airflow logging configurations
     # If you want to configure Airlfow logging,
     # you should do it manualy in ``./config/airflow.cfg`` file
-    python: debug
+    python: info
     # This will control py4j logging level of Spark application
-    java: info
-
+    java: error
 spark:
   # Name of Spark application
   application_name: datamart-collector-app
-
   jobs:
     # Here is configurations for each Spark job
     collect_users_demographic_dm_job:
@@ -32,14 +28,12 @@ spark:
       src_path: s3a://data-ice-lake-05/master/data/source/messenger-yp/events
       tgt_path: s3a://data-ice-lake-05/prod/cdm/messenger-yp
       coords_path: s3a://data-ice-lake-05/prod/dictionary/messenger-yp/cities-coordinates-dict
-
     collect_events_total_cnt_agg_wk_mnth_dm_job:
       date: 2022-04-26
       depth: 10
       src_path: s3a://data-ice-lake-05/master/data/source/messenger-yp/events
       tgt_path: s3a://data-ice-lake-05/prod/cdm/messenger-yp
       coords_path: s3a://data-ice-lake-05/prod/dictionary/messenger-yp/cities-coordinates-dict
-
     collect_add_to_friends_recommendations_dm_job:
       date: 2022-04-26
       depth: 10

@@ -6,9 +6,9 @@
 
 date="2022-04-26"
 depth=10
-src_path="s3a://data-ice-lake-05/messager-data/analytics/geo-events"
-tgt_path="s3a://data-ice-lake-05/messager-data/analytics/tmp"
-coords_path="s3a://data-ice-lake-05/messager-data/analytics/cities-coordinates"
+src_path="s3a://data-ice-lake-05/master/data/source/messenger-yp/events"
+tgt_path="s3a://data-ice-lake-05/master/tmp/messenger-yp"
+coords_path="s3a://data-ice-lake-05/prod/dictionary/messenger-yp/cities-coordinates-dict"
 processed_dttm="2023-05-22T12:03:25"
 
 /usr/bin/spark-submit $1 $date $depth $src_path $tgt_path $coords_path $processed_dttm

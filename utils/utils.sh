@@ -70,6 +70,13 @@ else
   exit 1
 fi
 
+# Instaling yq (https://github.com/mikefarah/yq)
+if command -v yq > /dev/null; then
+  echo "yq is already installed"
+else
+  echo "Installing yq"
+  sudo wget https://github.com/mikefarah/yq/releases/download/${VERSION}/${BINARY} -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+
 # Parse the Cluster dependencies from the pyproject.toml file and install it
 while IFS='=' read -r key value; do
   if [[ $key == *"["* ]]; then
