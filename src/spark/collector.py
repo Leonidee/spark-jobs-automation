@@ -376,7 +376,7 @@ class DatamartCollector(SparkRunner):
         )
 
     def collect_users_demographic_dm(self, keeper: ArgsKeeper) -> ...:
-        """Collects `users_demographic_dm` datamart.
+        """Collects `users-demographic-dm` datamart.
 
         ## Parameters
         `keeper` : `ArgsKeeper`
@@ -416,7 +416,7 @@ class DatamartCollector(SparkRunner):
         |    617|  Newcastle| Couldn't determine |2021-04-26 ... |           1|         [Newcastle]|
         +-------+-----------+--------------------+---------------+------------+--------------------+
         """
-        _DATAMART_NAME = "users_demographic_dm"
+        _DATAMART_NAME = "users-demographic-dm"
 
         self.logger.info(f"Starting collecting '{_DATAMART_NAME}'")
 
@@ -560,7 +560,7 @@ class DatamartCollector(SparkRunner):
         self.logger.info(f"Job execution time: {_job_end - _job_start}")
 
     def collect_events_total_cnt_agg_wk_mnth_dm(self, keeper: ArgsKeeper) -> ...:
-        """Collects `events_total_cnt_agg_wk_mnth_dm` datamart.
+        """Collects `events-total-cnt-agg-wk-mnth-dm` datamart.
 
         ## Parameters
         `keeper` : `ArgsKeeper`
@@ -603,7 +603,7 @@ class DatamartCollector(SparkRunner):
         |3      |2022-03-28|2022-03-01|160         |181          |16878            |148      |1190         |1068          |99175             |1121      |
         +-------+----------+----------+------------+-------------+-----------------+---------+-------------+--------------+------------------+----------+
         """
-        _DATAMART_NAME = "events_total_cnt_agg_wk_mnth_dm"
+        _DATAMART_NAME = "events-total-cnt-agg-wk-mnth-dm"
 
         self.logger.info(f"Staring collecting '{_DATAMART_NAME}'")
         _job_start = datetime.now()
@@ -894,7 +894,7 @@ class DatamartCollector(SparkRunner):
         self.logger.info(f"Job execution time: {_job_end - _job_start}")
 
     def collect_add_to_friends_recommendations_dm(self, keeper: ArgsKeeper) -> ...:
-        """Collects `add_to_friends_recommendations_dm` datamart.
+        """Collects `add-to-friends-recommendations-dm` datamart.
 
         ## Parameters
         `keeper` : `ArgsKeeper`
@@ -928,7 +928,7 @@ class DatamartCollector(SparkRunner):
         |-- local_time: timestamp (nullable = false)
         """
 
-        _DATAMART_NAME = "add_to_friends_recommendations_dm"
+        _DATAMART_NAME = "add-to-friends-recommendations-dm"
 
         self.logger.info(f"Staring collecting '{_DATAMART_NAME}'")
         _job_start = datetime.now()
