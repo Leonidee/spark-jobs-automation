@@ -4,19 +4,19 @@
 environ:
   # If we on production environment
   # Actualy not used in current version
-  is_prod: true
+  is_prod: false
   # Type of current evironment
   # Can be one of: ``dataproc``, ``airflow``, ``dev``
-  type: dataproc
+  type: dev
 logging:
   level:
     # Python logging level used inside project's modules
     # This does not take affect on Airflow logging configurations
     # If you want to configure Airlfow logging,
     # you should do it manualy in ``./config/airflow.cfg`` file
-    python: info
+    python: debug
     # This will control py4j logging level of Spark application
-    java: error
+    java: info
 spark:
   # Name of Spark application
   application_name: datamart-collector-app

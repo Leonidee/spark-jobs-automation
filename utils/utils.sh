@@ -7,7 +7,7 @@ function detect_shell {
   fi
 }
 
-function setup_dataproc  { 
+function setup_dataproc { 
 detect_shell
 
 # Setting up required environment variables
@@ -76,6 +76,7 @@ if command -v yq > /dev/null; then
 else
   echo "Installing yq"
   sudo wget https://github.com/mikefarah/yq/releases/download/${VERSION}/${BINARY} -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+fi
 
 # Parse the Cluster dependencies from the pyproject.toml file and install it
 while IFS='=' read -r key value; do
@@ -98,6 +99,14 @@ while IFS='=' read -r key value; do
     fi
   fi
 done < $PROJECT_PATH/pyproject.toml
+
+# Canging main configuration file -> config.yaml
+yq -i '
+    .environ.is_prod = true |
+    .environ.type = "dataproc" |
+    .logging.level.python = "info" |
+    .logging.level.java = "error" 
+' $PROJECT_PATH/config/config.yaml 
 
 # Preparing configuration files
 if test -f "$PROJECT_PATH/supervisor/api.conf"; then
@@ -152,6 +161,8 @@ fi
 }
 
 function setup_airflow {
+
+detect_shell
 
 if grep -q "^PROJECT_PATH=/opt/airflow" ./.env; then
   :
@@ -271,6 +282,23 @@ else
   exit 1
 fi
 
+# Instaling yq (https://github.com/mikefarah/yq)
+if command -v yq > /dev/null; then
+  echo "yq is already installed"
+else
+  echo "Installing yq"
+  sudo wget https://github.com/mikefarah/yq/releases/download/${VERSION}/${BINARY} -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+fi
+
+# Canging main configuration file -> config.yaml
+yq -i '
+    .environ.is_prod = true |
+    .environ.type = "airflow" |
+    .logging.level.python = "info" |
+    .logging.level.java = "error" 
+' $PROJECT_PATH/config/config.yaml 
+
+
 # Build image for Airflow and up containers
 docker compose build
 
@@ -295,18 +323,49 @@ else
   echo "PROJECT_PATH=$PROJECT_PATH\n" >> ./.env
 fi
 
-# Updating apt
-if command -v apt > /dev/null; then
+# Updating package manager and installing yq (https://github.com/mikefarah/yq)
+if command -v brew > /dev/null; then
+  echo "Updating brew"
+  brew update
+  brew upgrade
+  brew cleanup
+  if command -v yq > /dev/null; then
+    echo "yq is already installed"
+  else
+    echo "Installing yq"
+    brew install yq
+  fi
+elif command -v apt > /dev/null; then
   echo "Updating apt"
   sudo apt update
   sudo apt upgrade -y
   sudo apt autoremove -y
+  if command -v yq > /dev/null; then
+    echo "yq is already installed"
+  else
+    echo "Installing yq"
+    sudo wget https://github.com/mikefarah/yq/releases/download/${VERSION}/${BINARY} -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+  fi
 elif command -v apt-get > /dev/null; then
   echo "Updating apt-get"
   sudo apt-get update
   sudo apt-get upgrade -y
   sudo apt-get autoremove -y
+  if command -v yq > /dev/null; then
+    echo "yq is already installed"
+  else
+    echo "Installing yq"
+    sudo wget https://github.com/mikefarah/yq/releases/download/${VERSION}/${BINARY} -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+  fi
 fi
+
+# Canging main configuration file -> config.yaml
+yq -i '
+    .environ.is_prod = false |
+    .environ.type = "dev" |
+    .logging.level.python = "debug" |
+    .logging.level.java = "info" 
+' $PROJECT_PATH/config/config.yaml 
 
 # poetry
 if command -v poetry > /dev/null; then 
@@ -323,10 +382,16 @@ else
     echo 'export PATH="/home/leonide/.local/bin:$PATH"' >> "$SHELLRC"
 fi
 
+
 poetry config virtualenvs.in-project true
 
-poetry env use $PYTHON_PATH
+if [ -d "$PROJECT_PATH/.venv" ]; then
+    :
+else
+    poetry env use $PYTHON_PATH
+fi
 
-poetry install --only dev,test
+poetry shell
+poetry install --only dev,testing
 
 }
