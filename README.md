@@ -28,7 +28,7 @@ All cloud infrastructure provided by [Yandex Cloud](https://cloud.yandex.com/en-
 
 # Project structure
 
-![project-tree](https://github.com/leonidee/spark-jobs-automation/blob/main/images/project-tree.png?raw=true)
+![project-tree](https://github.com/leonidee/spark-jobs-automation/blob/main/images/project-tree-01.png?raw=true)
 
 
 This project structure appears to be organized into several directories and files, including:
