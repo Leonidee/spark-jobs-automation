@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import os
 import re
 import sys
 from datetime import date
+from os import walk
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -86,23 +86,22 @@ class Config:
 
     def _validate_config_name(self, name: str) -> bool:
         if not isinstance(name, str):
-            raise ValueError("config name must be string type")
+            raise TypeError("config name must be string type")
         if not re.match(pattern=r"^\w+\.ya?ml$", string=name):
             raise ValueError(
-                "Invalid config file extention, config must be an yaml file"
-                "with 'yml' or 'yaml' extention respectively"
+                "Invalid config file extention, config must be an yaml file with 'yml' or 'yaml' extention respectively"
             )
 
         return True
 
     def _find_config(self) -> Path:
-        for dirpath, _, filenames in os.walk(Path.cwd()):
+        for dirpath, _, filenames in walk(Path.cwd()):
             for filename in filenames:
                 if filename == self._CONFIG_NAME:
                     return Path(dirpath, filename)
 
         raise UnableToGetConfig(
-            "Enable to find config file in project!\n"
+            "Unable to find config file in project!\n"
             "Please, create one or explicitly specify the full path to file."
         )
 
@@ -117,7 +116,7 @@ class Config:
     @environ.setter
     def environ(self, v: str) -> ...:
         if not isinstance(v, str):
-            raise ValueError("value must be string")
+            raise TypeError("value must be string")
 
         self._environ = v
 

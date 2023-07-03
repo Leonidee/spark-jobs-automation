@@ -17,7 +17,7 @@ class DataMover(SparkRunner):
 
         self.logger = SparkLogger(
             level=self.config.get_logging_level["python"]
-        ).get_logger(name=__name__)
+        ).get_logger(name=f"{__name__}.{__class__.__name__}")
 
     def init_session(
         self,

@@ -63,10 +63,13 @@ class TelegramNotifyer(BaseRequestHandler):
             retry_delay=retry_delay,
             session_timeout=session_timeout,
         )
+
         self.logger = (
             getLogger("aiflow.task")
-            if self.config.IS_PROD
-            else SparkLogger().get_logger(name=__name__)
+            if self.config.environ == "airflow"
+            else SparkLogger(level=self.config.get_logging_level["python"]).get_logger(
+                name=f"{__name__}.{__class__.__name__}"
+            )
         )
 
         environ = EnvironManager()

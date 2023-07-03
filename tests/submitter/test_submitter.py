@@ -27,7 +27,7 @@ class TestSubmitJob:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = dict(
-            returncode=0, stdout="test", stderr="test"
+            returncode=2, stdout="test", stderr="test"
         )
         mock_post.return_value = mock_response
 
@@ -38,11 +38,11 @@ class TestSubmitJob:
         err_msg = "Timeout error"
         mock_post.side_effect = Timeout(err_msg)
 
-        with pytest.raises(UnableToSendRequest) as e:
+        with pytest.raises(UnableToSendRequest) as err:
             submitter.submit_job(job=test_job_name, keeper=keeper)
 
-        assert e.type is UnableToSendRequest
-        assert f"{err_msg}. Unable to submit '{test_job_name}' job." in str(e.value)
+        assert err.type is UnableToSendRequest
+        assert f"{err_msg}. Unable to submit '{test_job_name}' job." in str(err.value)
 
     @patch("src.submitter.submitter.requests.post")
     def test_raises_if_schema_error(self, mock_post, submitter, keeper, test_job_name):
@@ -118,13 +118,13 @@ class TestSubmitJob:
         )
 
     @patch("src.submitter.submitter.requests.post")
-    def test_raises_if_nonzero_returncode(
+    def test_raises_if_one_returncode(
         self, mock_post, submitter, keeper, test_job_name
     ):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "returncode": 2,
+            "returncode": 1,
             "stdout": "test",
             "stderr": "test",
         }
@@ -134,7 +134,10 @@ class TestSubmitJob:
             submitter.submit_job(job=test_job_name, keeper=keeper)
 
         assert e.type is UnableToSubmitJob
-        assert f"Unable to submit '{test_job_name}' job." in str(e.value)
+        assert (
+            f"Unable to submit '{test_job_name}' job! API returned 1 code. See job output in logs"
+            in str(e.value)
+        )
 
     @patch("src.submitter.submitter.requests.post")
     def test_raises_if_invalid_status_code(

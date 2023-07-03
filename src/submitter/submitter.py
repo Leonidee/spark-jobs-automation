@@ -74,7 +74,7 @@ class SparkSubmitter(BaseRequestHandler):
             getLogger("aiflow.task")
             if self.config.environ == "airflow"
             else SparkLogger(level=self.config.get_logging_level["python"]).get_logger(
-                name=__name__
+                name=f"{__name__}.{__class__.__name__}"
             )
         )
 
@@ -151,7 +151,7 @@ class SparkSubmitter(BaseRequestHandler):
                 self.logger.debug(f"Job stderr:\n{response.get('stderr')}")
                 return True
 
-            if response.get("returncode") == 1:
+            elif response.get("returncode") == 1:
                 self.logger.error(f"Job stdout:\n{response.get('stdout')}")
                 self.logger.error(f"Job stderr:\n{response.get('stderr')}")
 

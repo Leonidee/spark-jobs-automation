@@ -8,6 +8,8 @@ import pytest
 # package
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.cluster import DataProcCluster
+from src.config import Config
+from src.environ import EnvironManager
 from src.helper import SparkHelper
 from src.keeper import ArgsKeeper, SparkConfigKeeper
 from src.notifyer import TelegramNotifyer
@@ -49,7 +51,7 @@ def config_keeper() -> SparkConfigKeeper:
 
 
 @pytest.fixture
-def notifyer():
+def notifyer() -> TelegramNotifyer:
     """Returns instance of `TelegramNotifyer` class"""
     return TelegramNotifyer(max_retries=3, retry_delay=1)
 
@@ -68,7 +70,7 @@ def airflow_context():
 
 
 @pytest.fixture
-def submitter():
+def submitter() -> SparkSubmitter:
     os.environ["CLUSTER_API_BASE_URL"] = "http://example.com"
     return SparkSubmitter(session_timeout=1, retry_delay=1)
 
@@ -76,3 +78,13 @@ def submitter():
 @pytest.fixture
 def test_job_name():
     return "users_info_datamart_job"
+
+
+@pytest.fixture
+def config() -> Config:
+    return Config(config_name="config.yaml")
+
+
+@pytest.fixture
+def environ():
+    return EnvironManager()

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 from logging import Logger, StreamHandler, getLogger
-from pathlib import Path
 
 from coloredlogs import ColoredFormatter, install
 

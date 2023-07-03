@@ -57,7 +57,7 @@ class EnvironManager:
             getLogger("aiflow.task")
             if self.config.environ == "airflow"
             else SparkLogger(level=self.config.get_logging_level["python"]).get_logger(
-                name=__name__
+                name=f"{__name__}.{__class__.__name__}"
             )
         )
 

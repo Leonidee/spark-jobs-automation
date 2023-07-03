@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from logging import Logger
     from typing import Generator, Literal, Tuple
 
-    from botocore.client import S3
+    from botocore.client import S3  # type: ignore
 
     from src.keeper import ArgsKeeper
 
@@ -63,7 +63,7 @@ class SparkHelper:
 
         self.logger: Logger = SparkLogger(
             level=self.config.get_logging_level["python"]
-        ).get_logger(name=__name__)
+        ).get_logger(name=f"{__name__}.{__class__.__name__}")
 
         self.s3 = self._get_s3_instance()
 

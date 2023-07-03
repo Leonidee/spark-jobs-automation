@@ -1,12 +1,12 @@
 import os
 import sys
 from pathlib import Path
-
-import pytest
 from unittest.mock import patch
 
+import pytest
+
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.environ import EnvironNotSet, DotEnvError
+from src.environ import DotEnvError, EnvironNotSet
 
 
 class TestLoadEnviron:
