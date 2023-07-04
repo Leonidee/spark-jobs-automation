@@ -70,6 +70,7 @@ You can use it as follows:
 Usage: ./utils/setup-project.sh [dataproc|airflow|dev]
 ```
 
+
 ![project-setup](https://github.com/leonidee/spark-jobs-automation/blob/main/images/project-setup.gif)
 
 
@@ -79,7 +80,7 @@ The project requires two main environments:
 
 After running this script, you will be prompted to choose which environment you want to set up. And all of the required preperation will be done automatically.
 
-It's also possible to use the 'dev' parameter when preparing a development or testing environment. I personally used this while developing a project, and it helped automate boring tasks and save time when working on different hosts.
+It's also possible to use the `dev` parameter when preparing a development or testing environment. I personally used this while developing a project, and it helped automate boring tasks and save time when working on different hosts.
 
 
 **Note**: To deploy project you need a ready-to-use Dataproc Cluster by any provider you want. For this project I personally used [Yandex Data Proc](https://cloud.yandex.com/en-ru/services/data-proc).
