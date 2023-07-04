@@ -62,14 +62,24 @@ This project structure appears to be organized into several directories and file
 
 # Deploy and usage
 
+`./utils/setup-project` - is a main entry point for configuring a new environment required to deploy a project.
+
+You can use it as follows:
+
+```shell
+Usage: ./utils/setup-project.sh [dataproc|airflow|dev]
+```
+
 ![project-setup](https://github.com/leonidee/spark-jobs-automation/blob/main/images/project-setup.gif)
 
-`./utils/setup-project` - is a main entry point for configuring a new environment required to deploy a project.
 
 The project requires two main environments:
 1. Dataproc cluster with at least one compute node
-2. Debian based host to deploy Airflow
+2. Debian based host to deploy Airflow with docker
 
 After running this script, you will be prompted to choose which environment you want to set up. And all of the required preperation will be done automatically.
 
-**Note**: To deploy project you need a ready-to-use Dataproc Cluster by any provider you want. For this project I used [Yandex Data Proc](https://cloud.yandex.com/en-ru/services/data-proc).
+It's also possible to use the 'dev' parameter when preparing a development or testing environment. I personally used this while developing a project, and it helped automate boring tasks and save time when working on different hosts.
+
+
+**Note**: To deploy project you need a ready-to-use Dataproc Cluster by any provider you want. For this project I personally used [Yandex Data Proc](https://cloud.yandex.com/en-ru/services/data-proc).
