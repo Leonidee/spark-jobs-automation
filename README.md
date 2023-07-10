@@ -83,4 +83,4 @@ After running this script, you will be prompted to choose which environment you 
 It's also possible to use the `dev` parameter when preparing a development or testing environment. I personally used this while developing a project, and it helped automate boring tasks and save time when working on different hosts.
 
 
-**Note**: To deploy project you need a ready-to-use Dataproc Cluster by any provider you want. For this project I personally used [Yandex Data Proc](https://cloud.yandex.com/en-ru/services/data-proc).
+**Note**: To deploy project you need a ready-to-use Dataproc Cluster by any provider you want. For this project I personally used [Yandex Data Proc](https://cloud.yandex.com/en-ru/services/data-proc) version 2.1 with Yarn as resourse manager.
