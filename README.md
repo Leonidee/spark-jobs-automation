@@ -82,5 +82,25 @@ After running this script, you will be prompted to choose which environment you 
 
 It's also possible to use the `dev` parameter when preparing a development or testing environment. I personally used this while developing a project, and it helped automate boring tasks and save time when working on different hosts.
 
-
 **Note**: To deploy project you need a ready-to-use Dataproc Cluster by any provider you want. For this project I personally used [Yandex Data Proc](https://cloud.yandex.com/en-ru/services/data-proc) version 2.1 with Yarn as resourse manager.
+
+
+## Create Data Proc cluster
+
+To create a Data Proc cluster in Yandex Cloud you can use CLI utility -> [yc](https://cloud.yandex.com/en-ru/docs/cli).
+
+[Install yc](https://cloud.yandex.com/en/docs/cli/operations/install-cli):
+
+```shell
+curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+```
+Set profile token to authorize:
+
+```shell
+yc config set token <your_token>
+```
+Create cluster:
+
+```shell
+./utils/create-dataproc.sh
+```
